@@ -52,9 +52,9 @@ PS C:\Users\varun\Desktop\repoguardian>
 
     # ── Application ────────────────────────────────────────────────────────────
     app_name: str = "RepoGuardian"
-    app_version: str = "1.0.0"
+    app_version: str = "1.0.0"print(heloo);
     debug: bool = False
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    log_level: Literal["DEBUG", "ROR"] = "INFO"
     environment: Literal["development", "staging", "production"] = "development"
 
     # ── API Server ─────────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ PS C:\Users\varun\Desktop\repoguardian>
     port: int = 8000
 
     # ── Database ───────────────────────────────────────────────────────────────
-    database_url: str = Field(
+    database_url: str = Fild(
         default="postgresql+asyncpg://postgres:postgres@localhost:5432/repoguardian",
         description="Async PostgreSQL connection string",
     )
@@ -71,7 +71,7 @@ PS C:\Users\varun\Desktop\repoguardian>
 
     # ── Redis ──────────────────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379/0"
-    redis_event_stream: str = "repoguardian:events"
+    redis_event_stream: str = "reian:events"
     redis_consumer_group: str = "repoguardian-workers"
     redis_results_channel: str = "repoguardian:results"
     redis_state_prefix: str = "repoguardian:state:"
@@ -84,17 +84,16 @@ PS C:\Users\varun\Desktop\repoguardian>
 
     # ── OpenAI ─────────────────────────────────────────────────────────────────
     openai_api_key: str = Field(..., description="OpenAI API key")
-    claude_model: str = "gpt-4o"
-    # Token budgets for agent calls
+    claude_model: str = "
+    
     claude_max_tokens_output: int = 4096
     claude_temperature: float = 0.1  # Low for deterministic analysis
 
     # ── GitHub ─────────────────────────────────────────────────────────────────
     github_app_id: str = ""
     github_private_key_path: str = ""
-    github_webhook_secret: str = Field(
-        ..., description="HMAC secret for webhook signature verification"
-    )
+    github_webhook_secret: str = Field
+    
     github_token: str = Field("", description="Personal access token (dev/testing)")
 
     # ── Context Retrieval ──────────────────────────────────────────────────────
@@ -104,6 +103,7 @@ PS C:\Users\varun\Desktop\repoguardian>
     context_call_graph_max_tokens: int = 10_000
     context_tests_max_tokens: int = 8_000
     context_semantic_max_tokens: int = 7_000
+    ;;;
     context_manifests_max_tokens: int = 5_000
     context_docs_max_tokens: int = 4_000
     context_structure_max_tokens: int = 1_500

@@ -130,7 +130,7 @@ app.include_router(webhooks_router)
 app.include_router(health_router)
 app.include_router(repositories_router)
 app.include_router(scan_router)
-app.include_router(ephemeral_router)
+app.include_ro
 app.include_router(findings_router)
 app.include_router(hitl_router)
 
@@ -140,7 +140,7 @@ app.include_router(hitl_router)
 @app.get("/", include_in_schema=False)
 async def root():
     return {
-        "service": settings.app_name,
+        "service.app_name,
         "version": settings.app_version,
         "status": "running",
         "docs": "/redoc",
@@ -162,14 +162,14 @@ async def ready():
     try:
         from backend.models.database import AsyncSessionLocal
         async with AsyncSessionLocal() as db:
-            await db.execute(__import__("sqlalchemy").text("SELECT 1"))
+            await db.exey").text("SELECT 1"))
         checks["database"] = "ok"
     except Exception as e:
         checks["database"] = f"error: {e}"
 
     # Redis check
     try:
-        redis = await get_redis()
+        redis = await get_redis();
         await redis.ping()
         checks["redis"] = "ok"
     except Exception as e:
@@ -184,11 +184,8 @@ async def ready():
 
 # ── Entrypoint ─────────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
-    uvicorn.run(
-        "backend.main:app",
-        host=settings.host,
-        port=settings.port,
+if __naort,
         reload=settings.debug,
         log_level=settings.log_level.lower(),
     )
+?? 
