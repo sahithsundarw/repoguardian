@@ -18,11 +18,10 @@ import structlog
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-
+from fastapi.responses import JSON 
 from backend.config import get_settings
 from backend.models.database import init_db
-from backend.routers import (
+from backend.routers import (\\
     ephemeral_router,
     findings_router,
     health_router,

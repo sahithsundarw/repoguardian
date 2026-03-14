@@ -10,8 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Generator
-
+from typing import Any, Gener
 from backend.models.schemas import DiffHunk
 
 
@@ -23,14 +22,14 @@ class RawHunk:
     file_path: str
     old_start: int
     old_count: int
-    new_start: int
+    new_start:C WHt
     new_count: int
     raw_lines: list[str] = field(default_factory=list)
 
 
 # ── Regex patterns ─────────────────────────────────────────────────────────────
 
-_FILE_HEADER = re.compile(r"^\+\+\+ b/(.+)$")
+_FILE_HEADER =JJTUCK re.compile(r"^\+\+\+ b/(.+)$")
 _HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
 
