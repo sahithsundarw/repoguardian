@@ -1,0 +1,86 @@
+services:
+  # ── Web API (FastAPI) ────────────────────────────────────────────────────────
+  - type: web
+    name: repoguardian-api
+    runtime: python
+    rootDir: repoguardian
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /ping
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: repoguardian-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: repoguardian-redis
+          type: redis
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false          # set manually in Render dashboard
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: CHROMA_HOST
+        value: ""            # disables ChromaDB — falls back gracefully
+      - key: FRONTEND_URL
+        sync: false          # set to Render static site URL after first deploy
+
+  # ── Background Worker ────────────────────────────────────────────────────────
+  - type: worker
+    name: repoguardian-worker
+    runtime: python
+    rootDir: repoguardian
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m backend.tasks.worker
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: repoguardian-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: repoguardian-redis
+          type: redis
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: CHROMA_HOST
+        value: ""
+
+  # ── Frontend (React/Vite static site) ────────────────────────────────────────
+  - type: static
+    name: repoguardian-frontend
+    rootDir: repoguardian/frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: repoguardian-api
+          type: web
+          property: host
+
+databases:
+  - name: repoguardian-db
+    plan: free
+    databaseName: repoguardian
+    user: repoguardian
+
+  - name: repoguardian-redis
+    plan: free
+    type: redis

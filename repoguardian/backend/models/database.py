@@ -80,6 +80,7 @@ class EventType(str, enum.Enum):
     PUSH_TO_MAIN = "push_to_main"
     SCHEDULED_AUDIT = "scheduled_audit"
     PR_MERGE = "pr_merge"
+    FULL_SCAN = "full_scan"
 
 
 class Severity(str, enum.Enum):

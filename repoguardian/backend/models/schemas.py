@@ -49,6 +49,9 @@ class WebhookEvent(BaseModel):
     installation_id: str | None = None
     raw_payload: dict[str, Any] = Field(default_factory=dict)
     received_at: datetime = Field(default_factory=datetime.utcnow)
+    # Ephemeral scan flag — results stored in Redis only, not persisted to DB
+    is_ephemeral: bool = False
+    ephemeral_session_id: str | None = None
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -412,3 +415,58 @@ class ErrorResponse(BaseModel):
     error: str
     detail: str | None = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║                        ENROLLMENT & EPHEMERAL SCHEMAS                      ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+class TriggerConfig(BaseModel):
+    """Which real-time GitHub events should trigger analysis."""
+    pull_requests: bool = True
+    pushes: bool = True
+    merges: bool = True
+
+
+class EnrollRepositoryRequest(BaseModel):
+    """Request body for POST /api/repositories/enroll."""
+    repo_url: str
+    webhook_secret: str = ""
+    trigger_config: TriggerConfig = Field(default_factory=TriggerConfig)
+    audit_schedule: str | None = None  # "hourly"|"daily"|"weekly"|raw cron "0 9 * * 1"
+    default_branch: str = "main"
+
+
+class EphemeralFinding(BaseModel):
+    """Lightweight finding for ephemeral scan results (no DB ID, no HITL)."""
+    file_path: str | None = None
+    line_start: int | None = None
+    category: str
+    severity: str
+    title: str
+    description: str
+    evidence: str | None = None
+    suggested_fix: str | None = None
+    confidence: float
+    agent_source: str
+
+
+class EphemeralScanRequest(BaseModel):
+    """Request body for POST /api/scan/ephemeral."""
+    repo_url: str
+
+
+class EphemeralScanStatus(BaseModel):
+    """Ephemeral scan result stored in Redis with 1-hr TTL."""
+    session_id: str
+    status: Literal["pending", "running", "complete", "failed"]
+    repo_full_name: str
+    overall_verdict: str | None = None
+    health_score_delta: float | None = None
+    finding_count: int = 0
+    findings: list[EphemeralFinding] = []
+    pr_summary: str | None = None
+    error: str | None = None
+    created_at: datetime
+    completed_at: datetime | None = None

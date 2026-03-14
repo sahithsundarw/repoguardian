@@ -9,16 +9,21 @@ DELETE /api/repositories/{repo_id} — deactivate a repo
 
 from __future__ import annotations
 
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.database import Repository, get_db
-from backend.models.schemas import RepositoryCreate, RepositoryResponse
+from backend.models.database import Platform, Repository, get_db
+from backend.models.schemas import EnrollRepositoryRequest, RepositoryCreate, RepositoryResponse
 
 router = APIRouter(prefix="/api/repositories", tags=["repositories"])
+
+_GITHUB_URL_RE = re.compile(
+    r"(?:https?://)?(?:www\.)?github\.com/([^/\s]+)/([^/\s]+?)(?:\.git)?(?:/.*)?$"
+)
 
 
 @router.post("", response_model=RepositoryResponse, status_code=status.HTTP_201_CREATED)
@@ -64,6 +69,86 @@ async def register_repository(
         is_active=repo.is_active,
         created_at=repo.created_at,
     )
+
+
+@router.post("/enroll", response_model=RepositoryResponse, status_code=status.HTTP_201_CREATED)
+async def enroll_repository(
+    body: EnrollRepositoryRequest,
+    db: AsyncSession = Depends(get_db),
+) -> RepositoryResponse:
+    """
+    Enroll a repository with full monitoring config: webhook secret, trigger
+    preferences (PR/Push/Merge), and optional periodic audit schedule.
+    """
+    m = _GITHUB_URL_RE.match(body.repo_url.strip())
+    if not m:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid GitHub URL. Expected format: https://github.com/owner/repo",
+        )
+    owner, name = m.group(1), m.group(2)
+    full_name = f"{owner}/{name}"
+
+    # Check for duplicate
+    stmt = select(Repository).where(
+        Repository.platform == Platform.GITHUB,
+        Repository.full_name == full_name,
+    )
+    existing = (await db.execute(stmt)).scalar_one_or_none()
+    if existing:
+        if not existing.is_active:
+            # Re-activate a previously deactivated repo
+            existing.is_active = True
+            existing.config = _build_config(body)
+            await db.commit()
+            await db.refresh(existing)
+            repo = existing
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Repository {full_name} is already registered.",
+            )
+    else:
+        repo = Repository(
+            platform=Platform.GITHUB,
+            owner=owner,
+            name=name,
+            full_name=full_name,
+            clone_url=f"https://github.com/{full_name}.git",
+            default_branch=body.default_branch,
+            config=_build_config(body),
+        )
+        db.add(repo)
+        await db.commit()
+        await db.refresh(repo)
+
+    # Register periodic audit job if requested
+    if body.audit_schedule:
+        try:
+            from backend.services.scheduler import add_repo_job
+            add_repo_job(str(repo.id), repo.full_name, repo.default_branch or "main", body.audit_schedule)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("Could not schedule audit job: %s", e)
+
+    return RepositoryResponse(
+        id=str(repo.id),
+        platform=repo.platform,
+        full_name=repo.full_name,
+        clone_url=repo.clone_url,
+        default_branch=repo.default_branch,
+        primary_language=repo.primary_language,
+        is_active=repo.is_active,
+        created_at=repo.created_at,
+    )
+
+
+def _build_config(body: EnrollRepositoryRequest) -> dict:
+    return {
+        "webhook_secret": body.webhook_secret,
+        "trigger_config": body.trigger_config.model_dump(),
+        "audit_schedule": body.audit_schedule,
+    }
 
 
 @router.get("", response_model=list[RepositoryResponse])
@@ -134,3 +219,10 @@ async def deactivate_repository(
 
     repo.is_active = False
     await db.commit()
+
+    # Remove any scheduled audit job
+    try:
+        from backend.services.scheduler import remove_repo_job
+        remove_repo_job(str(rid))
+    except Exception:
+        pass

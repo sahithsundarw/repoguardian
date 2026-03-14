@@ -69,10 +69,29 @@ def parse_github_webhook(event_name: str, payload: dict[str, Any]) -> WebhookEve
     default_branch = repo_data.get("default_branch", "main")
 
     if event_name == "pull_request":
+        pr = payload.get("pull_request", {})
+
+        # Merged PR → treat as PR_MERGE (triggers full scan)
+        if action == "closed" and pr.get("merged"):
+            return WebhookEvent(
+                event_type=EventType.PR_MERGE,
+                platform=Platform.GITHUB,
+                repo_full_name=repo_full_name,
+                repo_clone_url=clone_url,
+                repo_default_branch=default_branch,
+                pr_number=pr.get("number"),
+                pr_title=pr.get("title"),
+                pr_author=pr.get("user", {}).get("login"),
+                base_sha=pr.get("base", {}).get("sha"),
+                head_sha=pr.get("merge_commit_sha"),
+                base_branch=pr.get("base", {}).get("ref"),
+                head_branch=pr.get("head", {}).get("ref"),
+                raw_payload=payload,
+            )
+
         if action not in ("opened", "synchronize", "reopened"):
             return None
 
-        pr = payload.get("pull_request", {})
         event_type = EventType.PR_OPEN if action == "opened" else EventType.PR_UPDATE
 
         return WebhookEvent(

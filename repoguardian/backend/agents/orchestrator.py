@@ -39,12 +39,15 @@ from backend.models.schemas import (
     ContextPackage,
     DependencyReport,
     DocumentationReport,
+    EphemeralFinding,
+    EphemeralScanStatus,
     PRReviewResult,
     QualityReport,
     SecurityReport,
     SynthesizedReport,
     WebhookEvent,
 )
+from backend.services.git_service import GitHubDiffFetcher
 from backend.services.github_service import GitHubAPIClient
 from backend.services.redis_service import StateStore
 
@@ -81,6 +84,11 @@ class Orchestrator:
         Main entry point: process one webhook event end-to-end.
         This is called by the background worker for each event.
         """
+        # ── Ephemeral path: no DB writes, results stored in Redis ──────────────
+        if event.is_ephemeral and event.ephemeral_session_id:
+            await self._process_ephemeral(event, event.ephemeral_session_id)
+            return
+
         logger.info(
             "[orchestrator] Processing %s event for %s PR#%s",
             event.event_type.value, event.repo_full_name, event.pr_number,
@@ -102,10 +110,16 @@ class Orchestrator:
 
         # ── Step 3: Context assembly (sequential, blocks all further steps) ───
         try:
-            context = await asyncio.wait_for(
-                self._context_agent.run(event, str(repo_id)),
-                timeout=30.0,
-            )
+            if event.event_type == EventType.FULL_SCAN:
+                context = await asyncio.wait_for(
+                    self._build_full_scan_context(event, str(repo_id)),
+                    timeout=120.0,
+                )
+            else:
+                context = await asyncio.wait_for(
+                    self._context_agent.run(event, str(repo_id)),
+                    timeout=30.0,
+                )
         except asyncio.TimeoutError:
             logger.error("[orchestrator] Context assembly timed out for %s", event.repo_full_name)
             return
@@ -139,6 +153,13 @@ class Orchestrator:
                 await self._hitl.post_review(event, report, db)
             except Exception as e:
                 logger.error("[orchestrator] HITL gateway error: %s", e)
+        elif event.event_type == EventType.FULL_SCAN:
+            try:
+                finding_ids = await self._hitl._persist_findings(report, event, db)
+                await db.commit()
+                logger.info("[orchestrator] Persisted %d findings for full scan", len(finding_ids))
+            except Exception as e:
+                logger.error("[orchestrator] Failed to persist full scan findings: %s", e)
 
         # ── Step 7: Health score update (fire-and-forget) ──────────────────────
         try:
@@ -189,12 +210,13 @@ class Orchestrator:
 
         # Determine which agents to run based on event type
         is_pr_event = event.event_type in (EventType.PR_OPEN, EventType.PR_UPDATE)
+        is_full_scan = event.event_type in (EventType.FULL_SCAN, EventType.PR_MERGE)
         has_manifests = bool(context.dependency_manifests)
 
         tasks = [
             run_safe(self._pr_review_agent.run(context), "pr_review") if is_pr_event else asyncio.sleep(0),
             run_safe(self._security_agent.run(context), "security_scanner"),
-            run_safe(self._quality_agent.run(context), "code_quality") if is_pr_event else asyncio.sleep(0),
+            run_safe(self._quality_agent.run(context), "code_quality") if (is_pr_event or is_full_scan) else asyncio.sleep(0),
             run_safe(self._dep_agent.run(context), "dependency_auditor") if has_manifests else asyncio.sleep(0),
             run_safe(self._doc_agent.run(context), "doc_verifier"),
         ]
@@ -209,6 +231,101 @@ class Orchestrator:
 
         return pr_review, security, quality, dependency, doc
 
+    # ── Ephemeral scan ─────────────────────────────────────────────────────────
+
+    async def _process_ephemeral(self, event: WebhookEvent, session_id: str) -> None:
+        """
+        Run a full analysis for an ephemeral scan request.
+        Results are stored in Redis with a 1-hr TTL — no DB writes at all.
+        """
+        from datetime import datetime, timezone, timedelta
+
+        logger.info("[orchestrator] Starting ephemeral scan for %s (session=%s)",
+                    event.repo_full_name, session_id)
+
+        async def _store(status_obj: EphemeralScanStatus) -> None:
+            await self._state.set(
+                f"ephemeral:{session_id}",
+                status_obj.model_dump(mode="json"),
+                ttl=timedelta(hours=1),
+            )
+
+        created_at = datetime.now(timezone.utc)
+
+        # Mark as running
+        await _store(EphemeralScanStatus(
+            session_id=session_id,
+            status="running",
+            repo_full_name=event.repo_full_name,
+            created_at=created_at,
+        ))
+
+        try:
+            # Build context using synthetic repo_id = session_id (no DB lookup)
+            context = await asyncio.wait_for(
+                self._build_full_scan_context(event, session_id),
+                timeout=120.0,
+            )
+
+            # Run specialist agents
+            pr_review, security, quality, dependency, doc = \
+                await self._run_agents_parallel(context, event)
+
+            # Synthesize
+            report = self._synthesizer.synthesize(
+                context=context,
+                pr_review=pr_review,
+                security=security,
+                quality=quality,
+                dependency=dependency,
+                doc=doc,
+            )
+
+            # Project findings to ephemeral format (no DB IDs)
+            ephemeral_findings = [
+                EphemeralFinding(
+                    file_path=f.file_path,
+                    line_start=f.line_start,
+                    category=f.category.value,
+                    severity=f.severity.value,
+                    title=f.title,
+                    description=f.description,
+                    evidence=f.evidence,
+                    suggested_fix=f.suggested_fix,
+                    confidence=f.confidence,
+                    agent_source=f.agent_source,
+                )
+                for f in report.findings
+            ]
+
+            await _store(EphemeralScanStatus(
+                session_id=session_id,
+                status="complete",
+                repo_full_name=event.repo_full_name,
+                overall_verdict=report.overall_verdict,
+                health_score_delta=report.health_score_delta,
+                finding_count=len(report.findings),
+                findings=ephemeral_findings,
+                pr_summary=report.pr_summary,
+                created_at=created_at,
+                completed_at=datetime.now(timezone.utc),
+            ))
+
+            logger.info("[orchestrator] Ephemeral scan complete for %s: %d findings",
+                        event.repo_full_name, len(report.findings))
+
+        except Exception as e:
+            logger.error("[orchestrator] Ephemeral scan failed for %s: %s",
+                         event.repo_full_name, e)
+            await _store(EphemeralScanStatus(
+                session_id=session_id,
+                status="failed",
+                repo_full_name=event.repo_full_name,
+                error=str(e),
+                created_at=created_at,
+                completed_at=datetime.now(timezone.utc),
+            ))
+
     # ── Helpers ────────────────────────────────────────────────────────────────
 
     async def _resolve_repo_id(
@@ -221,3 +338,113 @@ class Orchestrator:
         result = await db.execute(stmt)
         row = result.scalar_one_or_none()
         return row
+
+    async def _build_full_scan_context(
+        self, event: WebhookEvent, repo_id: str
+    ) -> ContextPackage:
+        """
+        Build a ContextPackage for a full repo scan (no PR diff).
+        Fetches the entire file tree, reads code files, and assembles
+        a synthetic context so the agents can analyse the whole codebase.
+        """
+        from backend.models.schemas import (
+            DiffHunk, FileContent,
+            ChangedSymbol, CallGraphEdge, SimilarChunk,
+        )
+
+        owner, repo_name = event.repo_full_name.split("/", 1)
+        ref = event.repo_default_branch or "HEAD"
+        fetcher = GitHubDiffFetcher(settings.github_token)
+
+        logger.info("[orchestrator] Full scan: fetching file tree for %s@%s", event.repo_full_name, ref)
+
+        # ── Fetch file tree ────────────────────────────────────────────────────
+        CODE_EXTENSIONS = {
+            ".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".go",
+            ".rb", ".php", ".c", ".cpp", ".cs", ".rs", ".swift", ".kt",
+        }
+        SKIP_DIRS = {
+            "node_modules", ".git", "dist", "build", "vendor",
+            "__pycache__", ".venv", "venv", "env", ".next", "coverage",
+        }
+
+        try:
+            all_files = await fetcher.get_repo_tree(owner, repo_name, ref)
+        except Exception as e:
+            logger.error("[orchestrator] Failed to fetch repo tree: %s", e)
+            all_files = []
+
+        code_files = [
+            f for f in all_files
+            if any(f.endswith(ext) for ext in CODE_EXTENSIONS)
+            and not any(skip in f.split("/") for skip in SKIP_DIRS)
+        ][:40]  # cap at 40 files to stay within token budget
+
+        logger.info("[orchestrator] Full scan: %d code files to scan", len(code_files))
+
+        # ── Fetch file contents ────────────────────────────────────────────────
+        raw_diff_parts: list[str] = []
+        diff_hunks: list[DiffHunk] = []
+
+        async def fetch_one(path: str) -> None:
+            content = await fetcher.fetch_file_content(owner, repo_name, path, ref)
+            if not content:
+                return
+            # Represent the file as a synthetic diff hunk (all lines as additions)
+            lines = content.splitlines()
+            added = [f"+{ln}" for ln in lines]
+            hunk_text = f"diff --git a/{path} b/{path}\n--- /dev/null\n+++ b/{path}\n" \
+                        f"@@ -0,0 +1,{len(lines)} @@\n" + "\n".join(added)
+            raw_diff_parts.append(hunk_text)
+            diff_hunks.append(DiffHunk(
+                file_path=path,
+                old_start=0, old_count=0,
+                new_start=1, new_count=len(lines),
+                lines=added,
+                context_lines=[],
+                added_lines=added,
+                removed_lines=[],
+            ))
+
+        await asyncio.gather(*[fetch_one(f) for f in code_files])
+
+        raw_diff = "\n\n".join(raw_diff_parts)
+
+        # ── Fetch manifests ────────────────────────────────────────────────────
+        manifest_names = ["requirements.txt", "pyproject.toml", "package.json", "Cargo.toml", "go.mod", "pom.xml"]
+        manifests: list[FileContent] = []
+        for name in manifest_names:
+            content = await fetcher.fetch_file_content(owner, repo_name, name, ref)
+            if content:
+                manifests.append(FileContent(path=name, content=content))
+
+        # ── Repo structure ─────────────────────────────────────────────────────
+        dirs: set[str] = set()
+        for fp in all_files:
+            parts = fp.split("/")
+            if len(parts) >= 1:
+                dirs.add(parts[0] + "/")
+            if len(parts) >= 2:
+                dirs.add(f"  {parts[0]}/{parts[1]}" + ("/" if "." not in parts[1] else ""))
+        repo_structure = "\n".join(sorted(dirs)[:60])
+
+        return ContextPackage(
+            repo_id=repo_id,
+            repo_full_name=event.repo_full_name,
+            event_type=EventType.FULL_SCAN,
+            pr_number=None,
+            raw_diff=raw_diff,
+            diff_hunks=diff_hunks,
+            changed_files=code_files,
+            changed_symbols=[],
+            expanded_definitions={},
+            call_graph_edges=[],
+            callers={},
+            callees={},
+            relevant_test_files=[],
+            semantic_neighbors=[],
+            dependency_manifests=manifests,
+            documentation_files=[],
+            repo_structure=repo_structure,
+            total_tokens_used=len(raw_diff) // 4,
+        )
