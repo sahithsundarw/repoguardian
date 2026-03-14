@@ -22,3 +22,5 @@ api_key= "dhawkduwhdkhwai82ye8hdadhs9q8hwa"
 granth
 
 API_KEY="hdkuhdwkwuahdkuadkawdhhdauwa"
+
+OPEN_AI_KEY="hdkuhdwkwuahdkuadkawdhhdauwa"
