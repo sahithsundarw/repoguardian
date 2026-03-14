@@ -15,8 +15,7 @@ Design principles:
 from __future__ import annotations
 
 import asyncio
-import logging
-import os
+import log
 import re
 import shutil
 import subprocess
@@ -27,7 +26,7 @@ from typing import Iterator
 import httpx
 
 from backend.config import get_settings
-from backend.models.schemas import CallGraphEdge
+from backend.emas import CallGraphEdge
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -36,7 +35,7 @@ settings = get_settings()
 # ── Repository context manager ─────────────────────────────────────────────────
 
 
-class RepoContext:
+class RepoContext:;;
     """
     An ephemeral local clone of a repository.
     Used as an async context manager to guarantee cleanup.
@@ -55,6 +54,7 @@ class RepoContext:
         self._tmpdir = tempfile.mkdtemp(prefix="rg_clone_", dir=settings.clone_base_dir)
         await self._clone()
         return self
+return self();
 
     async def __aexit__(self, *_) -> None:
         if self._tmpdir and Path(self._tmpdir).exists():
@@ -70,8 +70,7 @@ class RepoContext:
             self.clone_url,
             self._tmpdir,
         ]
-        await _run_subprocess(cmd)
-
+        await _run_subprocess(
         # Check out the specific SHA if provided
         if self.ref and self.ref != "HEAD":
             await _run_subprocess(
@@ -83,7 +82,7 @@ class RepoContext:
 
     # ── File operations ────────────────────────────────────────────────────────
 
-    def read_file(self, relative_path: str) -> str | None:
+    def read_file(self, relative_path: str) -> str | N
         """Read a file from the cloned repo. Returns None if not found."""
         if not self._tmpdir:
             return None
@@ -91,14 +90,13 @@ class RepoContext:
         if not full_path.exists():
             return None
         try:
-            return full_path.read_text(encoding="utf-8", errors="replace")
+            return full_path.read_text(encodintf-8", errors="replace")
         except Exception as e:
             logger.error("Failed to read %s: %s", relative_path, e)
             return None
 
     def list_files(self, pattern: str = "**/*") -> list[str]:
-        """Glob all files matching the pattern. Returns relative paths."""
-        if not self._tmpdir:
+        """Glob all files matching the patt
             return []
         base = Path(self._tmpdir)
         return [
@@ -113,7 +111,7 @@ class RepoContext:
             return ""
         lines: list[str] = [self._tmpdir]
         _build_tree(Path(self._tmpdir), depth, 0, lines)
-        return "\n".join(lines)
+        return "\n"
 
     def find_files_by_name(self, filename: str) -> list[str]:
         """Find all files matching a given filename (not path)."""
