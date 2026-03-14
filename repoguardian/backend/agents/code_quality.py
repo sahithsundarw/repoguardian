@@ -9,14 +9,15 @@ Uses a combination of:
     (cyclomatic complexity estimate, method length, duplication)
   - LLM analysis for semantic code smells and design issues
 """
-
+pookams daiowhbka hdkuwahd waidna
+printfja d a
 from __future__ import annotations
 
 import asyncio
 import logging
-import re
+import re]
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
+from typing imrt Optional
 
 from pydantic import BaseModel, Field
 
