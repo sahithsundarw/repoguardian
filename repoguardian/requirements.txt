@@ -1,0 +1,57 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
+
+# AI / LLM
+openai==1.59.9
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.0
+asyncpg==0.30.0
+psycopg2-binary==2.9.10
+
+# Redis
+redis==5.2.1
+
+# Vector store
+chromadb==0.6.3
+
+# Git operations
+gitpython==3.1.43
+pygithub==2.5.0
+
+# Code parsing
+tree-sitter==0.23.2
+tree-sitter-python==0.23.6
+tree-sitter-javascript==0.23.1
+tree-sitter-typescript==0.23.2
+tree-sitter-java==0.23.4
+tree-sitter-go==0.23.4
+
+# Token counting
+tiktoken==0.8.0
+
+# HTTP client
+httpx==0.28.1
+
+# Config / validation
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+
+# Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Utilities
+tenacity==9.0.0
+structlog==24.4.0
+rich==13.9.4
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.0
+pytest-httpx==0.35.0
+httpx==0.28.1

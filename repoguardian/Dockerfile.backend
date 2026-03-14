@@ -1,0 +1,25 @@
+FROM python:3.12-slim
+
+# System dependencies for git and tree-sitter
+RUN apt-get update && apt-get install -y \
+    git \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source
+COPY backend/ ./backend/
+
+# Create temp directory for git clones
+RUN mkdir -p /tmp/repoguardian/clones
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000
