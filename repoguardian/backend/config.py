@@ -10,10 +10,42 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
+class Settings(BaseSettings):PS C:\Users\varun\Desktop\repoguardian> git add .
+PS C:\Users\varun\Desktop\repoguardian> git commit -m "awdd"
+[feature/add-readme bb83c47] awdd
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+PS C:\Users\varun\Desktop\repoguardian> git push
+Enumerating objects: 11, done.
+Counting objects: 100% (11/11), done.
+Delta compression using up to 16 threads
+Compressing objects: 100% (6/6), done.
+Writing objects: 100% (6/6), 513 bytes | 513.00 KiB/s, done.
+Total 6 (delta 4), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (4/4), completed with 4 local objects.
+To https://github.com/sahithsundarw/repoguardian.git
+   1f029bc..bb83c47  feature/add-readme -> feature/add-readme
+PS C:\Users\varun\Desktop\repoguardian>
+
+
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_file_encoding="utf-8",
+        env_file_encoding="utf-8",PS C:\Users\varun\Desktop\repoguardian> git add .
+PS C:\Users\varun\Desktop\repoguardian> git commit -m "awdd"
+[feature/add-readme bb83c47] awdd
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+PS C:\Users\varun\Desktop\repoguardian> git push
+Enumerating objects: 11, done.
+Counting objects: 100% (11/11), done.
+Delta compression using up to 16 threads
+Compressing objects: 100% (6/6), done.
+Writing objects: 100% (6/6), 513 bytes | 513.00 KiB/s, done.
+Total 6 (delta 4), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (4/4), completed with 4 local objects.
+To https://github.com/sahithsundarw/repoguardian.git
+   1f029bc..bb83c47  feature/add-readme -> feature/add-readme
+PS C:\Users\varun\Desktop\repoguardian>
+
+
         case_sensitive=False,
         extra="ignore",
     )
