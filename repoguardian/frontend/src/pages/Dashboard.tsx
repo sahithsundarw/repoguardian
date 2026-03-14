@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api, HealthDashboard, Finding } from "../api/client";
 import { HealthScoreCard } from "../components/HealthScoreCard";
@@ -14,6 +14,75 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"all" | "CRITICAL" | "HIGH" | "MEDIUM" | "LOW">("all");
+  const [scanning, setScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);   // 0-100
+  const [scanError, setScanError] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (progressRef.current) { clearInterval(progressRef.current); progressRef.current = null; }
+  };
+
+  const triggerScan = async () => {
+    if (!repoId || scanning) return;
+    setScanning(true);
+    setScanProgress(0);
+    setScanError(null);
+
+    try {
+      await api.scan.trigger(repoId);
+    } catch (e) {
+      setScanError("Scan failed: " + String(e));
+      setScanning(false);
+      return;
+    }
+
+    // Animate progress bar over ~90s (never quite reaches 100 until done)
+    const startTime = Date.now();
+    const SCAN_ESTIMATE_MS = 90_000;
+    progressRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const pct = Math.min(92, (elapsed / SCAN_ESTIMATE_MS) * 100);
+      setScanProgress(pct);
+    }, 500);
+
+    // Capture baseline to detect when new data arrives
+    const baseTimestamp = dashboard?.as_of ?? "";
+
+    // Poll every 6s — refresh dashboard when as_of changes or after max attempts
+    let attempts = 0;
+    const MAX_ATTEMPTS = 20; // 20 × 6s = 120s max wait
+    pollRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const updated = await api.health.dashboard(repoId!);
+        const hasNewData = updated.as_of !== baseTimestamp;
+        const timedOut = attempts >= MAX_ATTEMPTS;
+
+        if (hasNewData || timedOut) {
+          stopPolling();
+          const finds = await api.findings.list({ repo_id: repoId!, status: "open" });
+          setScanProgress(100);
+          setDashboard(updated);
+          setFindings(finds);
+          setTimeout(() => { setScanning(false); setScanProgress(0); }, 600);
+        }
+      } catch {
+        // network blip — keep polling
+        if (attempts >= MAX_ATTEMPTS) {
+          stopPolling();
+          setScanning(false);
+          setScanProgress(0);
+          setScanError("Scan timed out. Check results manually.");
+        }
+      }
+    }, 6_000);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => () => stopPolling(), []);
 
   const fetchData = async () => {
     if (!repoId) return;
@@ -73,12 +142,52 @@ export const Dashboard: React.FC = () => {
             Last updated: {new Date(dashboard.as_of).toLocaleString()}
           </div>
         </div>
-        <button
-          onClick={fetchData}
-          style={styles.refreshBtn}
-        >
-          ↻ Refresh
-        </button>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={fetchData} disabled={scanning} style={{ ...styles.refreshBtn, opacity: scanning ? 0.4 : 1 }}>↻ Refresh</button>
+            <button
+              onClick={triggerScan}
+              disabled={scanning}
+              style={{
+                ...styles.refreshBtn,
+                background: scanning ? "#4f46e5" : "#6366f1",
+                color: "#fff",
+                opacity: scanning ? 0.85 : 1,
+                minWidth: 130,
+              }}
+            >
+              {scanning ? "⚡ Scanning…" : "⚡ Scan Repo"}
+            </button>
+          </div>
+
+          {/* Progress bar */}
+          {scanning && (
+            <div style={{ width: 260 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ color: "#94a3b8", fontSize: 12 }}>Analyzing codebase…</span>
+                <span style={{ color: "#6366f1", fontSize: 12, fontWeight: 600 }}>{Math.round(scanProgress)}%</span>
+              </div>
+              <div style={{ background: "#1e293b", borderRadius: 999, height: 6, overflow: "hidden", border: "1px solid #334155" }}>
+                <div style={{
+                  height: "100%",
+                  width: `${scanProgress}%`,
+                  background: "linear-gradient(90deg, #6366f1, #818cf8)",
+                  borderRadius: 999,
+                  transition: "width 0.4s ease",
+                }} />
+              </div>
+              <div style={{ color: "#475569", fontSize: 11, marginTop: 4, textAlign: "right" }}>
+                Dashboard will update automatically
+              </div>
+            </div>
+          )}
+
+          {scanError && (
+            <div style={{ fontSize: 12, color: "#ef4444", maxWidth: 260, textAlign: "right" }}>
+              {scanError}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Top row: Score card + Radar + Activity */}

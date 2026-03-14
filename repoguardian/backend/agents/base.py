@@ -262,11 +262,11 @@ class BaseAgent(ABC):
 
     # ── Logging helper ─────────────────────────────────────────────────────────
 
-    def log_info(self, msg: str, **kwargs) -> None:
-        logger.info("[%s] " + msg, self.name, *kwargs.values())
+    def log_info(self, msg: str, *args, **kwargs) -> None:
+        logger.info("[%s] " + msg, self.name, *args)
 
-    def log_error(self, msg: str, **kwargs) -> None:
-        logger.error("[%s] " + msg, self.name, *kwargs.values())
+    def log_error(self, msg: str, *args, **kwargs) -> None:
+        logger.error("[%s] " + msg, self.name, *args)
 
-    def log_debug(self, msg: str, **kwargs) -> None:
-        logger.debug("[%s] " + msg, self.name, *kwargs.values())
+    def log_debug(self, msg: str, *args, **kwargs) -> None:
+        logger.debug("[%s] " + msg, self.name, *args)

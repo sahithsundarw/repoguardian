@@ -113,6 +113,12 @@ class Settings(BaseSettings):
     # ── Temporary storage ─────────────────────────────────────────────────────
     clone_base_dir: str = "/tmp/repoguardian/clones"
 
+    # ── Frontend / CORS ───────────────────────────────────────────────────────
+    frontend_url: str = "http://localhost:5173"
+
+    # ── Ephemeral scans ───────────────────────────────────────────────────────
+    ephemeral_scan_ttl_hours: int = 1
+
     @field_validator("health_weight_code_quality")
     @classmethod
     def weights_must_sum_to_one(cls, v: float, info) -> float:  # noqa: N805

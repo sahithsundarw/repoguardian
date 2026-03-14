@@ -23,7 +23,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import get_settings
@@ -313,7 +313,7 @@ class HealthAggregatorAgent:
                 Finding.file_path,
                 func.count(Finding.id).label("finding_count"),
                 func.sum(
-                    func.case(
+                    case(
                         (Finding.severity == Severity.CRITICAL, 10),
                         (Finding.severity == Severity.HIGH, 5),
                         (Finding.severity == Severity.MEDIUM, 2),
@@ -321,10 +321,10 @@ class HealthAggregatorAgent:
                     )
                 ).label("risk_score"),
                 func.sum(
-                    func.case((Finding.severity == Severity.CRITICAL, 1), else_=0)
+                    case((Finding.severity == Severity.CRITICAL, 1), else_=0)
                 ).label("critical_count"),
                 func.sum(
-                    func.case((Finding.severity == Severity.HIGH, 1), else_=0)
+                    case((Finding.severity == Severity.HIGH, 1), else_=0)
                 ).label("high_count"),
             )
             .where(
@@ -334,7 +334,7 @@ class HealthAggregatorAgent:
             )
             .group_by(Finding.file_path)
             .order_by(func.sum(
-                func.case(
+                case(
                     (Finding.severity == Severity.CRITICAL, 10),
                     (Finding.severity == Severity.HIGH, 5),
                     (Finding.severity == Severity.MEDIUM, 2),

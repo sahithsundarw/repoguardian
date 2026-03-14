@@ -45,6 +45,56 @@ export interface ActivityItem {
   actor: string;
 }
 
+export interface RepositoryCreateBody {
+  full_name: string;
+  owner: string;
+  name: string;
+  platform: string;
+  clone_url: string;
+  github_token: string;
+}
+
+export interface TriggerConfig {
+  pull_requests: boolean;
+  pushes: boolean;
+  merges: boolean;
+}
+
+export interface EnrollRepositoryRequest {
+  repo_url: string;
+  webhook_secret: string;
+  trigger_config: TriggerConfig;
+  audit_schedule: string | null;
+  default_branch: string;
+}
+
+export interface EphemeralFinding {
+  file_path: string | null;
+  line_start: number | null;
+  category: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+  title: string;
+  description: string;
+  evidence: string | null;
+  suggested_fix: string | null;
+  confidence: number;
+  agent_source: string;
+}
+
+export interface EphemeralScanStatus {
+  session_id: string;
+  status: "pending" | "running" | "complete" | "failed";
+  repo_full_name: string;
+  overall_verdict: string | null;
+  health_score_delta: number | null;
+  finding_count: number;
+  findings: EphemeralFinding[];
+  pr_summary: string | null;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
 export interface Repository {
   id: string;
   platform: string;
@@ -98,7 +148,8 @@ export const api = {
   repositories: {
     list: () => get<Repository[]>("/api/repositories"),
     get: (id: string) => get<Repository>(`/api/repositories/${id}`),
-    create: (data: Partial<Repository>) => post<Repository>("/api/repositories", data),
+    create: (data: RepositoryCreateBody) => post<Repository>("/api/repositories", data),
+    enroll: (data: EnrollRepositoryRequest) => post<Repository>("/api/repositories/enroll", data),
   },
   health: {
     dashboard: (repoId: string) => get<HealthDashboard>(`/api/health/${repoId}`),
@@ -114,6 +165,11 @@ export const api = {
       return get<Finding[]>(`/api/findings?${q.toString()}`);
     },
     get: (id: string) => get<Finding>(`/api/findings/${id}`),
+  },
+  scan: {
+    trigger: (repoId: string) => post<{ status: string; event_id: string }>(`/api/repositories/${repoId}/scan`, {}),
+    startEphemeral: (repo_url: string) => post<{ session_id: string; repo_full_name: string }>("/api/scan/ephemeral", { repo_url }),
+    getEphemeralResult: (session_id: string) => get<EphemeralScanStatus>(`/api/scan/ephemeral/${session_id}`),
   },
   hitl: {
     action: (findingId: string, action: string, reasonCode?: string) =>

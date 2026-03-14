@@ -23,10 +23,12 @@ from fastapi.responses import JSONResponse
 from backend.config import get_settings
 from backend.models.database import init_db
 from backend.routers import (
+    ephemeral_router,
     findings_router,
     health_router,
     hitl_router,
     repositories_router,
+    scan_router,
     webhooks_router,
 )
 from backend.services.redis_service import close_redis, get_redis
@@ -73,10 +75,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Redis connection failed: %s (events won't be queued)", e)
 
+    # Start APScheduler for periodic audits
+    try:
+        from backend.models.database import AsyncSessionLocal
+        from backend.services.scheduler import start_scheduler
+        await start_scheduler(AsyncSessionLocal)
+        logger.info("Scheduler started")
+    except Exception as e:
+        logger.warning("Scheduler failed to start: %s", e)
+
     yield
 
     # Cleanup
     from backend.services.redis_service import close_redis
+    from backend.services.scheduler import stop_scheduler
+    stop_scheduler()
     await close_redis()
     logger.info("Shutdown complete")
 
@@ -98,9 +111,15 @@ app = FastAPI(
 
 # ── CORS ───────────────────────────────────────────────────────────────────────
 
+_cors_origins = list({
+    settings.frontend_url,
+    "http://localhost:3000",
+    "http://localhost:5173",
+})
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -111,6 +130,8 @@ app.add_middleware(
 app.include_router(webhooks_router)
 app.include_router(health_router)
 app.include_router(repositories_router)
+app.include_router(scan_router)
+app.include_router(ephemeral_router)
 app.include_router(findings_router)
 app.include_router(hitl_router)
 
