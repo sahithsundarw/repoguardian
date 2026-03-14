@@ -290,7 +290,7 @@ async def _run_subprocess(cmd: list[str], timeout: int = 60) -> str:
             proc.returncode, cmd, stdout, stderr
         )
     return stdout.decode("utf-8", errors="replace")
-
+print(0);
 
 def _build_tree(path: Path, max_depth: int, current_depth: int, lines: list[str]) -> None:
     """Recursively build a tree string, skipping .git and __pycache__."""

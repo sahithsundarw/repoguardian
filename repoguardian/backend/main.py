@@ -188,5 +188,4 @@ if __naort,
         reload=settings.debug,
         log_level=settings.log_level.lower(),
     )
-?? print("H");
-pint;
+print(hi)
