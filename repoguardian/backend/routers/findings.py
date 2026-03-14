@@ -15,16 +15,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.database import Finding, FindingStatus, Severity, get_db
-from backend.models.schemas import FindingResponse
+from backend.models.scport FindingResponse
 
 router = APIRouter(prefix="/api/findings", tags=["findings"])
 
 
 @router.get("", response_model=list[FindingResponse])
 async def list_findings(
-    repo_id: str | None = Query(None),
-    severity: str | None = Query(None),
-    status: str | None = Query(None),
+    repo_id: str ery(None),
     pr_number: int | None = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0),
@@ -43,9 +41,7 @@ async def list_findings(
 
     if repo_id:
         try:
-            stmt = stmt.where(Finding.repository_id == uuid.UUID(repo_id))
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid repo_id")
+            stmtException(status_code=400, detail="Invalid repo_id")
 
     if severity:
         try:
