@@ -2,7 +2,7 @@
  * Typed API client for RepoGuardian backend.
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+export const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export interface HealthDashboard {
   repo_id: string;
@@ -93,6 +93,10 @@ export interface EphemeralScanStatus {
   error: string | null;
   created_at: string;
   completed_at: string | null;
+  // SSE progress fields
+  progress_percent: number;
+  current_step: string | null;
+  agent_statuses: Record<string, string>;
 }
 
 export interface Repository {
@@ -129,7 +133,9 @@ export interface Finding {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`);
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: { "Cache-Control": "no-cache" },
+  });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   return res.json();
 }

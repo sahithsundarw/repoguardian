@@ -208,6 +208,9 @@ class HealthRecord(Base):
     low_count: Mapped[int] = mapped_column(Integer, default=0)
     info_count: Mapped[int] = mapped_column(Integer, default=0)
 
+    # The commit that was analysed (for deduplication)
+    head_sha: Mapped[str | None] = mapped_column(String(64), index=True)
+
     # The PR or audit that triggered this record
     trigger_event: Mapped[str | None] = mapped_column(String(256))
     trigger_pr_number: Mapped[int | None] = mapped_column(Integer)

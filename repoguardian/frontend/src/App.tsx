@@ -3,12 +3,13 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ControlCenter } from "./pages/ControlCenter";
 import { RepositoryList } from "./pages/RepositoryList";
 import { Dashboard } from "./pages/Dashboard";
+import { T } from "./theme";
 
 export const App: React.FC = () => (
   <BrowserRouter>
     <div style={{
       minHeight: "100vh",
-      background: "#0f172a",
+      background: T.bg,
       fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     }}>
       <Routes>

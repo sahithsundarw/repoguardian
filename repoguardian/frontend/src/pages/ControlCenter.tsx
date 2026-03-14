@@ -2,13 +2,15 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   api,
+  BASE_URL,
   EnrollRepositoryRequest,
   EphemeralFinding,
   EphemeralScanStatus,
   Repository,
 } from "../api/client";
+import { T } from "../theme";
 
-// ── URL parser (shared between both paths) ────────────────────────────────────
+// ── URL parser ────────────────────────────────────────────────────────────────
 
 interface ParsedRepo {
   owner: string;
@@ -34,7 +36,7 @@ function parseGitHubUrl(raw: string): ParsedRepo | null {
 // ── Score badge ───────────────────────────────────────────────────────────────
 
 const gradeColor: Record<string, string> = {
-  A: "#22c55e", B: "#84cc16", C: "#eab308", D: "#f97316", F: "#ef4444",
+  A: T.success, B: "#84cc16", C: T.warning, D: "#f97316", F: T.error,
 };
 
 function ScoreBadge({ repoId }: { repoId: string }) {
@@ -42,9 +44,9 @@ function ScoreBadge({ repoId }: { repoId: string }) {
   useEffect(() => { api.health.score(repoId).then(setScore).catch(() => {}); }, [repoId]);
   if (!score) return null;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#0f172a", borderRadius: 8, padding: "2px 10px" }}>
-      <span style={{ color: gradeColor[score.grade] ?? "#94a3b8", fontWeight: 700, fontSize: 15 }}>{score.grade}</span>
-      <span style={{ color: "#64748b", fontSize: 13 }}>{Math.round(score.overall_score)}</span>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: T.bg, borderRadius: 8, padding: "2px 10px" }}>
+      <span style={{ color: gradeColor[score.grade] ?? T.textMuted, fontWeight: 700, fontSize: 15 }}>{score.grade}</span>
+      <span style={{ color: T.textDim, fontSize: 13 }}>{Math.round(score.overall_score)}</span>
     </span>
   );
 }
@@ -52,7 +54,33 @@ function ScoreBadge({ repoId }: { repoId: string }) {
 // ── Severity colours ──────────────────────────────────────────────────────────
 
 const sevColor: Record<string, string> = {
-  CRITICAL: "#ef4444", HIGH: "#f97316", MEDIUM: "#eab308", LOW: "#22c55e", INFO: "#6366f1",
+  CRITICAL: T.critical, HIGH: T.high, MEDIUM: T.medium, LOW: T.low, INFO: T.info,
+};
+
+// ── Agent status dot ─────────────────────────────────────────────────────────
+
+function AgentDot({ status }: { status: string }) {
+  const color =
+    status === "complete" ? T.success :
+    status === "failed"   ? T.error :
+    status === "skipped"  ? T.textDim :
+    status === "running"  ? T.warning : T.border;
+
+  return (
+    <span style={{
+      display: "inline-block", width: 10, height: 10, borderRadius: "50%",
+      background: color,
+      animation: status === "running" ? "pulse-dot 1s ease-in-out infinite" : "none",
+      flexShrink: 0,
+    }} />
+  );
+}
+
+const AGENT_LABELS: Record<string, string> = {
+  security_scanner:   "Security Scanner",
+  code_quality:       "Code Quality",
+  dependency_auditor: "Dependency Auditor",
+  doc_verifier:       "Doc Verifier",
 };
 
 // ── Ephemeral finding row ─────────────────────────────────────────────────────
@@ -61,39 +89,35 @@ function EphemeralFindingRow({ f }: { f: EphemeralFinding }) {
   const [open, setOpen] = useState(false);
   return (
     <div style={{
-      background: "#0f172a", border: "1px solid #334155", borderRadius: 10,
+      background: T.bg, border: `1px solid ${T.border}`, borderRadius: 10,
       marginBottom: 8, overflow: "hidden",
     }}>
       <div
         onClick={() => setOpen(!open)}
-        style={{
-          display: "flex", alignItems: "center", gap: 12,
-          padding: "12px 16px", cursor: "pointer",
-        }}
+        style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer" }}
       >
         <span style={{
-          background: sevColor[f.severity] + "22",
-          color: sevColor[f.severity],
-          border: `1px solid ${sevColor[f.severity]}44`,
-          borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700,
-          whiteSpace: "nowrap",
+          background: (sevColor[f.severity] ?? T.info) + "22",
+          color: sevColor[f.severity] ?? T.info,
+          border: `1px solid ${(sevColor[f.severity] ?? T.info)}44`,
+          borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
         }}>{f.severity}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, color: "#f1f5f9", fontSize: 14, fontWeight: 600 }}>{f.title}</p>
+          <p style={{ margin: 0, color: T.text, fontSize: 14, fontWeight: 600 }}>{f.title}</p>
           {f.file_path && (
-            <p style={{ margin: "2px 0 0", color: "#64748b", fontSize: 12, fontFamily: "monospace" }}>
+            <p style={{ margin: "2px 0 0", color: T.textDim, fontSize: 12, fontFamily: "monospace" }}>
               {f.file_path}{f.line_start ? `:${f.line_start}` : ""}
             </p>
           )}
         </div>
-        <span style={{ color: "#475569", fontSize: 13 }}>{open ? "▲" : "▼"}</span>
+        <span style={{ color: T.textDim, fontSize: 13 }}>{open ? "▲" : "▼"}</span>
       </div>
       {open && (
-        <div style={{ padding: "0 16px 16px", borderTop: "1px solid #334155" }}>
-          <p style={{ margin: "12px 0 8px", color: "#94a3b8", fontSize: 13, lineHeight: 1.6 }}>{f.description}</p>
+        <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${T.border}` }}>
+          <p style={{ margin: "12px 0 8px", color: T.textMuted, fontSize: 13, lineHeight: 1.6 }}>{f.description}</p>
           {f.evidence && (
             <pre style={{
-              background: "#1e293b", border: "1px solid #334155", borderRadius: 8,
+              background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8,
               padding: "10px 14px", fontSize: 12, color: "#e2e8f0",
               margin: "8px 0", overflowX: "auto", whiteSpace: "pre-wrap",
             }}>{f.evidence}</pre>
@@ -104,7 +128,7 @@ function EphemeralFindingRow({ f }: { f: EphemeralFinding }) {
               <p style={{ margin: 0, color: "#bbf7d0", fontSize: 12, lineHeight: 1.5 }}>{f.suggested_fix}</p>
             </div>
           )}
-          <p style={{ margin: "8px 0 0", color: "#475569", fontSize: 11 }}>
+          <p style={{ margin: "8px 0 0", color: T.textDim, fontSize: 11 }}>
             Confidence: {Math.round(f.confidence * 100)}% · Source: {f.agent_source}
           </p>
         </div>
@@ -147,22 +171,20 @@ export const ControlCenter: React.FC = () => {
   const [flashResult, setFlashResult] = useState<EphemeralScanStatus | null>(null);
   const [flashError, setFlashError] = useState("");
   const [flashProgress, setFlashProgress] = useState(0);
+  const [currentStep, setCurrentStep] = useState<string | null>(null);
+  const [agentStatuses, setAgentStatuses] = useState<Record<string, string>>({});
   const [flashUrlError, setFlashUrlError] = useState<string | null>(null);
-  const flashPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const flashProgressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const esRef = useRef<EventSource | null>(null);
 
   // Existing repos
   const [repos, setRepos] = useState<Repository[]>([]);
 
   useEffect(() => {
     api.repositories.list().then(setRepos).catch(() => {});
-    return () => {
-      if (flashPollRef.current) clearInterval(flashPollRef.current);
-      if (flashProgressRef.current) clearInterval(flashProgressRef.current);
-    };
+    return () => { esRef.current?.close(); };
   }, []);
 
-  // ── Monitor handlers ─────────────────────────────────────────────────────────
+  // ── Monitor handlers ──────────────────────────────────────────────────────
 
   function resolvedSchedule(): string | null {
     if (auditSchedule === "none") return null;
@@ -208,11 +230,11 @@ export const ControlCenter: React.FC = () => {
     }
   }
 
-  // ── Flash audit handlers ──────────────────────────────────────────────────────
+  // ── Flash audit handlers — SSE ────────────────────────────────────────────
 
   function stopFlash() {
-    if (flashPollRef.current) { clearInterval(flashPollRef.current); flashPollRef.current = null; }
-    if (flashProgressRef.current) { clearInterval(flashProgressRef.current); flashProgressRef.current = null; }
+    esRef.current?.close();
+    esRef.current = null;
   }
 
   async function handleFlashScan() {
@@ -225,64 +247,83 @@ export const ControlCenter: React.FC = () => {
     setFlashResult(null);
     setFlashError("");
     setFlashProgress(0);
-
-    // Animate progress bar to 92% over 90s
-    let prog = 0;
-    flashProgressRef.current = setInterval(() => {
-      prog = Math.min(prog + (92 / 90), 92);
-      setFlashProgress(prog);
-    }, 1000);
+    setCurrentStep("Starting analysis…");
+    setAgentStatuses({});
 
     let sessionId: string;
     try {
       const res = await api.scan.startEphemeral(flashUrl.trim());
       sessionId = res.session_id;
     } catch (err: unknown) {
-      stopFlash();
       setFlashError(err instanceof Error ? err.message : String(err));
       setFlashStep("error");
       return;
     }
 
-    let attempts = 0;
-    flashPollRef.current = setInterval(async () => {
-      attempts++;
-      if (attempts > 36) { // 3 min timeout
-        stopFlash();
-        setFlashError("Analysis timed out after 3 minutes. Please try again.");
-        setFlashStep("error");
-        return;
-      }
+    // Open SSE stream
+    const es = new EventSource(`${BASE_URL}/api/scan/ephemeral/${sessionId}/stream`);
+    esRef.current = es;
+
+    es.onmessage = (event) => {
       try {
-        const result = await api.scan.getEphemeralResult(sessionId);
-        if (result.status === "complete") {
-          stopFlash();
+        const status: EphemeralScanStatus = JSON.parse(event.data);
+        setFlashProgress(status.progress_percent ?? 0);
+        setCurrentStep(status.current_step ?? null);
+        setAgentStatuses(status.agent_statuses ?? {});
+
+        if (status.status === "complete") {
           setFlashProgress(100);
-          setFlashResult(result);
+          setFlashResult(status);
           setFlashStep("results");
-        } else if (result.status === "failed") {
-          stopFlash();
-          setFlashError(result.error || "Analysis failed.");
+          es.close();
+        } else if (status.status === "failed") {
+          setFlashError(status.error || "Analysis failed.");
+          setFlashStep("error");
+          es.close();
+        }
+      } catch {}
+    };
+
+    es.addEventListener("done", () => { es.close(); });
+    es.addEventListener("timeout", () => {
+      es.close();
+      setFlashError("Analysis timed out after 3 minutes. Please try again.");
+      setFlashStep("error");
+    });
+    es.addEventListener("error", (e: Event) => {
+      const data = (e as MessageEvent).data;
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.error === "session_not_found") {
+          setFlashError("Scan session not found or expired.");
           setFlashStep("error");
         }
       } catch {}
-    }, 5000);
+      es.close();
+    });
+
+    es.onerror = () => {
+      // Connection dropped — don't show error if scan already complete
+      if (flashStep !== "results") {
+        es.close();
+      }
+    };
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0f172a", display: "flex", flexDirection: "column", alignItems: "center", padding: "48px 24px 80px" }}>
+    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", padding: "48px 24px 80px" }}>
 
       {/* Branding */}
       <div style={{ textAlign: "center", marginBottom: 40 }}>
         <div style={{ fontSize: 44, marginBottom: 10 }}>🛡️</div>
-        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, color: "#f1f5f9", letterSpacing: -1 }}>RepoGuardian</h1>
-        <p style={{ margin: "8px 0 0", color: "#64748b", fontSize: 15 }}>Repository Control Center</p>
+        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, color: T.text, letterSpacing: -1 }}>RepoGuardian</h1>
+        <p style={{ margin: "8px 0 0", color: T.textDim, fontSize: 15 }}>Repository Control Center</p>
       </div>
 
       {/* Tab selector */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 24, background: "#1e293b", borderRadius: 12, padding: 6, border: "1px solid #334155" }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 24, background: T.surface, borderRadius: 12, padding: 6, border: `1px solid ${T.border}` }}>
         {(["monitor", "flash"] as ActiveTab[]).map((tab) => (
           <button
             key={tab}
@@ -290,8 +331,8 @@ export const ControlCenter: React.FC = () => {
             style={{
               padding: "10px 28px", borderRadius: 8, border: "none", cursor: "pointer",
               fontWeight: 600, fontSize: 14,
-              background: activeTab === tab ? "#6366f1" : "transparent",
-              color: activeTab === tab ? "#fff" : "#64748b",
+              background: activeTab === tab ? T.accent : "transparent",
+              color: activeTab === tab ? "#fff" : T.textDim,
               transition: "all 0.15s",
             }}
           >
@@ -301,20 +342,19 @@ export const ControlCenter: React.FC = () => {
       </div>
 
       {/* Panel */}
-      <div style={{ width: "100%", maxWidth: 600, background: "#1e293b", borderRadius: 16, padding: 32, border: "1px solid #334155" }}>
+      <div style={{ width: "100%", maxWidth: 600, background: T.surface, borderRadius: 16, padding: 32, border: `1px solid ${T.border}` }}>
 
         {/* ── Monitor Tab ── */}
         {activeTab === "monitor" && (
           <>
             {enrollStep === "form" && (
               <>
-                <h2 style={{ margin: "0 0 6px", color: "#f1f5f9", fontSize: 20, fontWeight: 700 }}>Enroll a Repository</h2>
-                <p style={{ margin: "0 0 24px", color: "#64748b", fontSize: 14 }}>
+                <h2 style={{ margin: "0 0 6px", color: T.text, fontSize: 20, fontWeight: 700 }}>Enroll a Repository</h2>
+                <p style={{ margin: "0 0 24px", color: T.textDim, fontSize: 14 }}>
                   Set up continuous monitoring. RepoGuardian will analyze every PR, push, or merge event automatically.
                 </p>
 
-                {/* Repo URL */}
-                <label style={{ display: "block", color: "#94a3b8", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Repository URL</label>
+                <label style={{ display: "block", color: T.textMuted, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Repository URL</label>
                 <input
                   autoFocus
                   type="text"
@@ -324,14 +364,13 @@ export const ControlCenter: React.FC = () => {
                   placeholder="https://github.com/owner/repo"
                   style={{
                     width: "100%", boxSizing: "border-box",
-                    background: "#0f172a", border: `1.5px solid ${repoUrlError ? "#ef4444" : "#334155"}`,
-                    borderRadius: 8, padding: "11px 14px", color: "#f1f5f9", fontSize: 15, outline: "none", marginBottom: 4,
+                    background: T.bg, border: `1.5px solid ${repoUrlError ? T.error : T.border}`,
+                    borderRadius: 8, padding: "11px 14px", color: T.text, fontSize: 15, outline: "none", marginBottom: 4,
                   }}
                 />
-                {repoUrlError && <p style={{ margin: "0 0 12px", color: "#ef4444", fontSize: 12 }}>{repoUrlError}</p>}
+                {repoUrlError && <p style={{ margin: "0 0 12px", color: T.error, fontSize: 12 }}>{repoUrlError}</p>}
 
-                {/* Webhook Secret */}
-                <label style={{ display: "block", color: "#94a3b8", fontSize: 13, fontWeight: 600, marginBottom: 6, marginTop: 16 }}>Webhook Secret <span style={{ color: "#475569", fontWeight: 400 }}>(optional)</span></label>
+                <label style={{ display: "block", color: T.textMuted, fontSize: 13, fontWeight: 600, marginBottom: 6, marginTop: 16 }}>Webhook Secret <span style={{ color: T.textDim, fontWeight: 400 }}>(optional)</span></label>
                 <input
                   type="password"
                   value={webhookSecret}
@@ -339,14 +378,13 @@ export const ControlCenter: React.FC = () => {
                   placeholder="Your GitHub webhook secret"
                   style={{
                     width: "100%", boxSizing: "border-box",
-                    background: "#0f172a", border: "1.5px solid #334155",
-                    borderRadius: 8, padding: "11px 14px", color: "#f1f5f9", fontSize: 15, outline: "none",
+                    background: T.bg, border: `1.5px solid ${T.border}`,
+                    borderRadius: 8, padding: "11px 14px", color: T.text, fontSize: 15, outline: "none",
                   }}
                 />
 
-                {/* Triggers */}
-                <div style={{ marginTop: 24, padding: "16px 18px", background: "#0f172a", borderRadius: 10, border: "1px solid #334155" }}>
-                  <p style={{ margin: "0 0 12px", color: "#f1f5f9", fontSize: 14, fontWeight: 600 }}>Real-Time Triggers</p>
+                <div style={{ marginTop: 24, padding: "16px 18px", background: T.bg, borderRadius: 10, border: `1px solid ${T.border}` }}>
+                  <p style={{ margin: "0 0 12px", color: T.text, fontSize: 14, fontWeight: 600 }}>Real-Time Triggers</p>
                   {[
                     ["Pull Request Events", triggerPR, setTriggerPR] as const,
                     ["Push Events", triggerPush, setTriggerPush] as const,
@@ -357,27 +395,26 @@ export const ControlCenter: React.FC = () => {
                         type="checkbox"
                         checked={val}
                         onChange={(e) => setter(e.target.checked)}
-                        style={{ width: 16, height: 16, accentColor: "#6366f1" }}
+                        style={{ width: 16, height: 16, accentColor: T.accent }}
                       />
-                      <span style={{ color: "#94a3b8", fontSize: 14 }}>{label}</span>
+                      <span style={{ color: T.textMuted, fontSize: 14 }}>{label}</span>
                     </label>
                   ))}
                 </div>
 
-                {/* Schedule */}
-                <div style={{ marginTop: 16, padding: "16px 18px", background: "#0f172a", borderRadius: 10, border: "1px solid #334155" }}>
-                  <p style={{ margin: "0 0 12px", color: "#f1f5f9", fontSize: 14, fontWeight: 600 }}>Periodic Audits</p>
+                <div style={{ marginTop: 16, padding: "16px 18px", background: T.bg, borderRadius: 10, border: `1px solid ${T.border}` }}>
+                  <p style={{ margin: "0 0 12px", color: T.text, fontSize: 14, fontWeight: 600 }}>Periodic Audits</p>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {(["none", "hourly", "daily", "weekly", "custom"] as AuditSchedule[]).map((s) => (
                       <button
                         key={s}
                         onClick={() => setAuditSchedule(s)}
                         style={{
-                          padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer",
+                          padding: "6px 14px", borderRadius: 8, cursor: "pointer",
                           fontSize: 13, fontWeight: 600,
-                          background: auditSchedule === s ? "#6366f1" : "#1e293b",
-                          color: auditSchedule === s ? "#fff" : "#64748b",
-                          border: `1.5px solid ${auditSchedule === s ? "#6366f1" : "#334155"}`,
+                          background: auditSchedule === s ? T.accentGlow : T.surface,
+                          color: auditSchedule === s ? T.accent : T.textDim,
+                          border: `1.5px solid ${auditSchedule === s ? T.accent : T.border}`,
                         }}
                       >
                         {s.charAt(0).toUpperCase() + s.slice(1)}
@@ -392,8 +429,8 @@ export const ControlCenter: React.FC = () => {
                       placeholder="0 9 * * 1  (min hour dom month dow)"
                       style={{
                         width: "100%", boxSizing: "border-box", marginTop: 12,
-                        background: "#1e293b", border: "1.5px solid #334155",
-                        borderRadius: 8, padding: "9px 14px", color: "#f1f5f9", fontSize: 13, outline: "none",
+                        background: T.surface, border: `1.5px solid ${T.border}`,
+                        borderRadius: 8, padding: "9px 14px", color: T.text, fontSize: 13, outline: "none",
                         fontFamily: "monospace",
                       }}
                     />
@@ -404,7 +441,7 @@ export const ControlCenter: React.FC = () => {
                   onClick={handleEnroll}
                   style={{
                     width: "100%", marginTop: 24,
-                    background: "#6366f1", color: "#fff",
+                    background: T.accent, color: "#fff",
                     border: "none", borderRadius: 10, padding: "13px 0",
                     fontSize: 15, fontWeight: 700, cursor: "pointer",
                   }}
@@ -416,26 +453,26 @@ export const ControlCenter: React.FC = () => {
 
             {enrollStep === "loading" && (
               <div style={{ textAlign: "center", padding: "32px 0" }}>
-                <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #334155", borderTopColor: "#6366f1", animation: "spin 0.8s linear infinite", margin: "0 auto 20px" }} />
-                <p style={{ color: "#94a3b8", margin: 0, fontSize: 15 }}>Enrolling repository…</p>
+                <div style={{ width: 40, height: 40, borderRadius: "50%", border: `3px solid ${T.border}`, borderTopColor: T.accent, animation: "spin 0.8s linear infinite", margin: "0 auto 20px" }} />
+                <p style={{ color: T.textMuted, margin: 0, fontSize: 15 }}>Enrolling repository…</p>
               </div>
             )}
 
             {enrollStep === "success" && enrolledRepo && (
               <div style={{ textAlign: "center" }}>
                 <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
-                <h3 style={{ margin: "0 0 8px", color: "#f1f5f9", fontSize: 20 }}>Repository Enrolled!</h3>
-                <p style={{ margin: "0 0 24px", color: "#64748b", fontSize: 14 }}>{enrolledRepo.full_name} is now under continuous monitoring.</p>
+                <h3 style={{ margin: "0 0 8px", color: T.text, fontSize: 20 }}>Repository Enrolled!</h3>
+                <p style={{ margin: "0 0 24px", color: T.textDim, fontSize: 14 }}>{enrolledRepo.full_name} is now under continuous monitoring.</p>
                 <div style={{ display: "flex", gap: 10 }}>
                   <button
                     onClick={() => navigate(`/repo/${enrolledRepo.id}`)}
-                    style={{ flex: 1, background: "#6366f1", color: "#fff", border: "none", borderRadius: 8, padding: "12px 0", fontSize: 15, fontWeight: 600, cursor: "pointer" }}
+                    style={{ flex: 1, background: T.accent, color: "#fff", border: "none", borderRadius: 8, padding: "12px 0", fontSize: 15, fontWeight: 600, cursor: "pointer" }}
                   >
                     View Dashboard →
                   </button>
                   <button
                     onClick={() => { setEnrollStep("form"); setRepoUrl(""); setWebhookSecret(""); setAuditSchedule("none"); }}
-                    style={{ flex: 1, background: "#334155", color: "#94a3b8", border: "none", borderRadius: 8, padding: "12px 0", fontSize: 15, fontWeight: 600, cursor: "pointer" }}
+                    style={{ flex: 1, background: T.border, color: T.textMuted, border: "none", borderRadius: 8, padding: "12px 0", fontSize: 15, fontWeight: 600, cursor: "pointer" }}
                   >
                     Enroll Another
                   </button>
@@ -445,12 +482,12 @@ export const ControlCenter: React.FC = () => {
 
             {enrollStep === "error" && (
               <>
-                <div style={{ background: "#450a0a", border: "1px solid #ef4444", borderRadius: 10, padding: "16px 20px", marginBottom: 20 }}>
-                  <p style={{ margin: 0, color: "#ef4444", fontSize: 14 }}>{enrollError}</p>
+                <div style={{ background: "#450a0a", border: `1px solid ${T.error}`, borderRadius: 10, padding: "16px 20px", marginBottom: 20 }}>
+                  <p style={{ margin: 0, color: T.error, fontSize: 14 }}>{enrollError}</p>
                 </div>
                 <button
                   onClick={() => setEnrollStep("form")}
-                  style={{ width: "100%", background: "#334155", color: "#f1f5f9", border: "none", borderRadius: 8, padding: "12px 0", fontSize: 15, fontWeight: 600, cursor: "pointer" }}
+                  style={{ width: "100%", background: T.border, color: T.text, border: "none", borderRadius: 8, padding: "12px 0", fontSize: 15, fontWeight: 600, cursor: "pointer" }}
                 >
                   Try Again
                 </button>
@@ -462,8 +499,8 @@ export const ControlCenter: React.FC = () => {
         {/* ── Flash Audit Tab ── */}
         {activeTab === "flash" && (
           <>
-            <h2 style={{ margin: "0 0 6px", color: "#f1f5f9", fontSize: 20, fontWeight: 700 }}>Flash Audit</h2>
-            <p style={{ margin: "0 0 24px", color: "#64748b", fontSize: 14 }}>
+            <h2 style={{ margin: "0 0 6px", color: T.text, fontSize: 20, fontWeight: 700 }}>Flash Audit</h2>
+            <p style={{ margin: "0 0 24px", color: T.textDim, fontSize: 14 }}>
               Scan any public GitHub repo on-demand. No registration required — results are ephemeral.
             </p>
 
@@ -476,9 +513,9 @@ export const ControlCenter: React.FC = () => {
                 placeholder="https://github.com/owner/repo"
                 disabled={flashStep === "scanning"}
                 style={{
-                  flex: 1, background: "#0f172a",
-                  border: `1.5px solid ${flashUrlError ? "#ef4444" : "#334155"}`,
-                  borderRadius: 8, padding: "11px 14px", color: "#f1f5f9", fontSize: 15, outline: "none",
+                  flex: 1, background: T.bg,
+                  border: `1.5px solid ${flashUrlError ? T.error : T.border}`,
+                  borderRadius: 8, padding: "11px 14px", color: T.text, fontSize: 15, outline: "none",
                   opacity: flashStep === "scanning" ? 0.6 : 1,
                 }}
               />
@@ -486,47 +523,80 @@ export const ControlCenter: React.FC = () => {
                 onClick={handleFlashScan}
                 disabled={flashStep === "scanning"}
                 style={{
-                  background: "#6366f1", color: "#fff", border: "none",
+                  background: flashStep === "scanning" ? T.accentDim : T.accent,
+                  color: "#fff", border: "none",
                   borderRadius: 8, padding: "11px 22px", fontSize: 15,
                   fontWeight: 600, cursor: flashStep === "scanning" ? "not-allowed" : "pointer",
-                  whiteSpace: "nowrap", opacity: flashStep === "scanning" ? 0.7 : 1,
+                  whiteSpace: "nowrap",
                 }}
               >
                 {flashStep === "scanning" ? "Analyzing…" : "Analyze Now →"}
               </button>
             </div>
-            {flashUrlError && <p style={{ margin: "8px 0 0", color: "#ef4444", fontSize: 12 }}>{flashUrlError}</p>}
+            {flashUrlError && <p style={{ margin: "8px 0 0", color: T.error, fontSize: 12 }}>{flashUrlError}</p>}
 
-            {/* Progress bar */}
+            {/* Live SSE progress panel */}
             {flashStep === "scanning" && (
-              <div style={{ marginTop: 24 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ color: "#94a3b8", fontSize: 13 }}>Running AI analysis across 10 agents…</span>
-                  <span style={{ color: "#6366f1", fontSize: 13, fontWeight: 600 }}>{Math.round(flashProgress)}%</span>
+              <div style={{ marginTop: 24, background: T.bg, borderRadius: 12, border: `1px solid ${T.border}`, padding: "20px 22px" }}>
+                {/* Header */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.accent, animation: "pulse-dot 1s ease-in-out infinite" }} />
+                  <span style={{ color: T.text, fontWeight: 600, fontSize: 14 }}>Flash Audit in Progress</span>
                 </div>
-                <div style={{ background: "#0f172a", borderRadius: 8, height: 8, overflow: "hidden" }}>
-                  <div style={{
-                    height: "100%", borderRadius: 8,
-                    background: "linear-gradient(90deg, #6366f1, #818cf8)",
-                    width: `${flashProgress}%`,
-                    transition: "width 0.8s ease",
-                  }} />
+
+                {/* Current step label */}
+                {currentStep && (
+                  <p style={{ margin: "0 0 10px", color: T.textMuted, fontSize: 13 }}>{currentStep}</p>
+                )}
+
+                {/* Progress bar */}
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ color: T.textDim, fontSize: 12 }}>Analyzing…</span>
+                    <span style={{ color: T.accent, fontSize: 12, fontWeight: 700 }}>{Math.round(flashProgress)}%</span>
+                  </div>
+                  <div style={{ background: T.surface, borderRadius: 8, height: 8, overflow: "hidden", border: `1px solid ${T.border}` }}>
+                    <div style={{
+                      height: "100%", borderRadius: 8,
+                      background: `linear-gradient(90deg, ${T.accent}, ${T.accentDim})`,
+                      width: `${flashProgress}%`,
+                      transition: "width 0.6s ease",
+                    }} />
+                  </div>
                 </div>
-                <p style={{ margin: "8px 0 0", color: "#475569", fontSize: 12, textAlign: "center" }}>
-                  Dashboard will update automatically when complete
-                </p>
+
+                {/* Agent status rows */}
+                {Object.keys(agentStatuses).length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {Object.entries(agentStatuses).map(([agent, status]) => (
+                      <div key={agent} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <AgentDot status={status} />
+                        <span style={{ color: T.textMuted, fontSize: 13, flex: 1 }}>
+                          {AGENT_LABELS[agent] ?? agent}
+                        </span>
+                        <span style={{
+                          fontSize: 11, fontWeight: 600,
+                          color: status === "complete" ? T.success : status === "failed" ? T.error : status === "skipped" ? T.textDim : T.warning,
+                          textTransform: "capitalize",
+                        }}>
+                          {status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Error */}
             {flashStep === "error" && (
               <div style={{ marginTop: 20 }}>
-                <div style={{ background: "#450a0a", border: "1px solid #ef4444", borderRadius: 10, padding: "16px 20px", marginBottom: 16 }}>
-                  <p style={{ margin: 0, color: "#ef4444", fontSize: 14 }}>{flashError}</p>
+                <div style={{ background: "#450a0a", border: `1px solid ${T.error}`, borderRadius: 10, padding: "16px 20px", marginBottom: 16 }}>
+                  <p style={{ margin: 0, color: T.error, fontSize: 14 }}>{flashError}</p>
                 </div>
                 <button
                   onClick={() => { setFlashStep("idle"); setFlashError(""); }}
-                  style={{ width: "100%", background: "#334155", color: "#f1f5f9", border: "none", borderRadius: 8, padding: "11px 0", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+                  style={{ width: "100%", background: T.border, color: T.text, border: "none", borderRadius: 8, padding: "11px 0", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
                 >
                   Try Again
                 </button>
@@ -536,55 +606,51 @@ export const ControlCenter: React.FC = () => {
             {/* Results */}
             {flashStep === "results" && flashResult && (
               <div style={{ marginTop: 24 }}>
-                {/* Summary card */}
-                <div style={{ background: "#0f172a", borderRadius: 12, padding: "20px", border: "1px solid #334155", marginBottom: 20 }}>
+                <div style={{ background: T.bg, borderRadius: 12, padding: 20, border: `1px solid ${T.border}`, marginBottom: 20 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
                     <div>
-                      <p style={{ margin: "0 0 4px", color: "#64748b", fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }}>Verdict</p>
-                      <p style={{ margin: 0, color: flashResult.overall_verdict === "APPROVE" ? "#22c55e" : "#f97316", fontWeight: 700, fontSize: 18 }}>
+                      <p style={{ margin: "0 0 4px", color: T.textDim, fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }}>Verdict</p>
+                      <p style={{ margin: 0, color: flashResult.overall_verdict === "APPROVE" ? T.success : T.warning, fontWeight: 700, fontSize: 18 }}>
                         {flashResult.overall_verdict ?? "—"}
                       </p>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <p style={{ margin: "0 0 4px", color: "#64748b", fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }}>Score Impact</p>
-                      <p style={{ margin: 0, fontWeight: 700, fontSize: 18, color: (flashResult.health_score_delta ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>
+                      <p style={{ margin: "0 0 4px", color: T.textDim, fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }}>Score Impact</p>
+                      <p style={{ margin: 0, fontWeight: 700, fontSize: 18, color: (flashResult.health_score_delta ?? 0) >= 0 ? T.success : T.error }}>
                         {flashResult.health_score_delta !== null
                           ? `${flashResult.health_score_delta >= 0 ? "+" : ""}${flashResult.health_score_delta.toFixed(1)}`
                           : "—"}
                       </p>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <p style={{ margin: "0 0 4px", color: "#64748b", fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }}>Findings</p>
-                      <p style={{ margin: 0, color: "#f1f5f9", fontWeight: 700, fontSize: 18 }}>{flashResult.finding_count}</p>
+                      <p style={{ margin: "0 0 4px", color: T.textDim, fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }}>Findings</p>
+                      <p style={{ margin: 0, color: T.text, fontWeight: 700, fontSize: 18 }}>{flashResult.finding_count}</p>
                     </div>
                   </div>
                   {flashResult.pr_summary && (
-                    <p style={{ margin: "16px 0 0", color: "#94a3b8", fontSize: 13, lineHeight: 1.6, borderTop: "1px solid #334155", paddingTop: 12 }}>
+                    <p style={{ margin: "16px 0 0", color: T.textMuted, fontSize: 13, lineHeight: 1.6, borderTop: `1px solid ${T.border}`, paddingTop: 12 }}>
                       {flashResult.pr_summary.slice(0, 400)}{flashResult.pr_summary.length > 400 ? "…" : ""}
                     </p>
                   )}
                 </div>
 
-                {/* Findings list */}
                 {flashResult.findings.length > 0 ? (
                   <>
-                    <p style={{ margin: "0 0 12px", color: "#94a3b8", fontSize: 13, fontWeight: 600 }}>
-                      Active Findings ({flashResult.findings.length})
+                    <p style={{ margin: "0 0 12px", color: T.textMuted, fontSize: 13, fontWeight: 600 }}>
+                      Findings ({flashResult.findings.length})
                     </p>
-                    {flashResult.findings.map((f, i) => (
-                      <EphemeralFindingRow key={i} f={f} />
-                    ))}
+                    {flashResult.findings.map((f, i) => <EphemeralFindingRow key={i} f={f} />)}
                   </>
                 ) : (
-                  <div style={{ textAlign: "center", padding: "24px 0", color: "#64748b" }}>
+                  <div style={{ textAlign: "center", padding: "24px 0", color: T.textDim }}>
                     <p style={{ fontSize: 32, margin: "0 0 8px" }}>✅</p>
                     <p style={{ margin: 0, fontSize: 14 }}>No issues found!</p>
                   </div>
                 )}
 
                 <button
-                  onClick={() => { setFlashStep("idle"); setFlashResult(null); setFlashUrl(""); setFlashProgress(0); }}
-                  style={{ width: "100%", marginTop: 16, background: "#334155", color: "#94a3b8", border: "none", borderRadius: 8, padding: "11px 0", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+                  onClick={() => { setFlashStep("idle"); setFlashResult(null); setFlashUrl(""); setFlashProgress(0); setAgentStatuses({}); }}
+                  style={{ width: "100%", marginTop: 16, background: T.border, color: T.textMuted, border: "none", borderRadius: 8, padding: "11px 0", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
                 >
                   Scan Another Repo
                 </button>
@@ -598,40 +664,38 @@ export const ControlCenter: React.FC = () => {
       {repos.length > 0 && (
         <div style={{ width: "100%", maxWidth: 600, marginTop: 48 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            <div style={{ flex: 1, height: 1, background: "#1e293b" }} />
-            <span style={{ color: "#475569", fontSize: 13, whiteSpace: "nowrap" }}>or pick an existing repository</span>
-            <div style={{ flex: 1, height: 1, background: "#1e293b" }} />
+            <div style={{ flex: 1, height: 1, background: T.surface }} />
+            <span style={{ color: T.textDim, fontSize: 13, whiteSpace: "nowrap" }}>or pick an existing repository</span>
+            <div style={{ flex: 1, height: 1, background: T.surface }} />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {repos.map((repo) => (
               <div
                 key={repo.id}
                 onClick={() => navigate(`/repo/${repo.id}`)}
-                style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", transition: "border-color 0.15s" }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#6366f1")}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#334155")}
+                style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", transition: "border-color 0.15s" }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = T.accent)}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = T.border)}
               >
                 <div>
-                  <p style={{ margin: 0, color: "#f1f5f9", fontWeight: 600, fontSize: 15 }}>{repo.full_name}</p>
-                  <p style={{ margin: "3px 0 0", color: "#64748b", fontSize: 13 }}>
+                  <p style={{ margin: 0, color: T.text, fontWeight: 600, fontSize: 15 }}>{repo.full_name}</p>
+                  <p style={{ margin: "3px 0 0", color: T.textDim, fontSize: 13 }}>
                     {repo.platform} · {repo.default_branch}
                     {repo.primary_language ? ` · ${repo.primary_language}` : ""}
                   </p>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <ScoreBadge repoId={repo.id} />
-                  <span style={{ color: "#475569", fontSize: 18 }}>›</span>
+                  <span style={{ color: T.textDim, fontSize: 18 }}>›</span>
                 </div>
               </div>
             ))}
           </div>
           <p style={{ textAlign: "center", marginTop: 16 }}>
-            <Link to="/repos" style={{ color: "#475569", fontSize: 13, textDecoration: "none" }}>View all repositories →</Link>
+            <Link to="/repos" style={{ color: T.textDim, fontSize: 13, textDecoration: "none" }}>View all repositories →</Link>
           </p>
         </div>
       )}
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 };

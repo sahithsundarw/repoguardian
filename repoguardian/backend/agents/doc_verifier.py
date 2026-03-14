@@ -182,8 +182,8 @@ class DocVerifierAgent(BaseAgent):
                     output_schema=_DocLLMOutput,
                 ),
             )
-        except Exception as e:
-            self.log_error("Doc verification LLM failed: %s", e=str(e))
+        except Exception:
+            logger.exception("[doc_verifier] LLM verification failed")
             return []
 
         return [

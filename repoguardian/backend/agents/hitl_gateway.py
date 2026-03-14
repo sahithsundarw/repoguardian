@@ -237,6 +237,20 @@ class HITLGatewayAgent:
 
         finding_ids = []
         for af in report.findings:
+            # Deduplicate: skip if an identical open finding already exists
+            dup_stmt = select(Finding.id).where(
+                Finding.repository_id == repo.id,
+                Finding.file_path == af.file_path,
+                Finding.line_start == af.line_start,
+                Finding.category == FindingCategory(af.category.value),
+                Finding.title == af.title,
+                Finding.status == FindingStatus.OPEN,
+            )
+            existing_id = (await db.execute(dup_stmt)).scalar_one_or_none()
+            if existing_id:
+                finding_ids.append(str(existing_id))
+                continue
+
             db_finding = Finding(
                 id=uuid.UUID(af.finding_id),
                 repository_id=repo.id,

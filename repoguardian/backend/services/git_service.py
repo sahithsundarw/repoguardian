@@ -254,6 +254,11 @@ class GitHubDiffFetcher:
                 response = await client.get(url, headers=headers, params=params)
                 response.raise_for_status()
                 data = response.json()
+                if data.get("truncated"):
+                    logger.warning(
+                        "Repo tree truncated for %s/%s — large repo (>1000 files), partial analysis only",
+                        owner, repo,
+                    )
                 return [
                     item["path"]
                     for item in data.get("tree", [])

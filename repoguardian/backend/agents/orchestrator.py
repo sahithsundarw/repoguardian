@@ -94,6 +94,16 @@ class Orchestrator:
             event.event_type.value, event.repo_full_name, event.pr_number,
         )
 
+        # ── Step 0: SHA-based scan cache (skip re-analysis of same commit) ─────
+        if event.head_sha:
+            cache_key = f"scan_cache:{event.repo_full_name}:{event.head_sha}"
+            if await self._state.get(cache_key):
+                logger.info(
+                    "[orchestrator] Cache hit for %s@%s — skipping re-analysis",
+                    event.repo_full_name, event.head_sha,
+                )
+                return
+
         # ── Step 1: Rate limit check ───────────────────────────────────────────
         if not await self._state.check_rate_limit(event.repo_full_name):
             logger.warning(
@@ -167,10 +177,20 @@ class Orchestrator:
                 repo_id=repo_id,
                 report=report,
                 event_label=f"{event.event_type.value}:{event.pr_number or 'audit'}",
+                head_sha=context.head_sha,
                 db=db,
             )
         except Exception as e:
             logger.error("[orchestrator] Health aggregator error: %s", e)
+
+        # ── Cache this SHA so duplicate events are skipped ────────────────────
+        if event.head_sha:
+            from datetime import timedelta
+            await self._state.set(
+                f"scan_cache:{event.repo_full_name}:{event.head_sha}",
+                {"cached": True},
+                ttl=timedelta(hours=1),
+            )
 
         logger.info(
             "[orchestrator] Pipeline complete for %s PR#%s",
@@ -252,24 +272,67 @@ class Orchestrator:
 
         created_at = datetime.now(timezone.utc)
 
-        # Mark as running
+        # Mark as running — phase 1
         await _store(EphemeralScanStatus(
             session_id=session_id,
             status="running",
             repo_full_name=event.repo_full_name,
             created_at=created_at,
+            progress_percent=5,
+            current_step="Connecting to repository",
         ))
 
         try:
+            await _store(EphemeralScanStatus(
+                session_id=session_id, status="running",
+                repo_full_name=event.repo_full_name, created_at=created_at,
+                progress_percent=15, current_step="Fetching repository tree",
+            ))
+
             # Build context using synthetic repo_id = session_id (no DB lookup)
             context = await asyncio.wait_for(
                 self._build_full_scan_context(event, session_id),
                 timeout=120.0,
             )
 
+            await _store(EphemeralScanStatus(
+                session_id=session_id, status="running",
+                repo_full_name=event.repo_full_name, created_at=created_at,
+                progress_percent=35, current_step="Running agent analysis",
+            ))
+
+            # Mark all agents as running before dispatch
+            has_manifests = bool(context.dependency_manifests)
+            agent_statuses_running = {
+                "security_scanner": "running",
+                "code_quality": "running",
+                "dependency_auditor": "running" if has_manifests else "skipped",
+                "doc_verifier": "running",
+            }
+            await _store(EphemeralScanStatus(
+                session_id=session_id, status="running",
+                repo_full_name=event.repo_full_name, created_at=created_at,
+                progress_percent=40, current_step="Security · Quality · Dependencies",
+                agent_statuses=agent_statuses_running,
+            ))
+
             # Run specialist agents
             pr_review, security, quality, dependency, doc = \
                 await self._run_agents_parallel(context, event)
+
+            # Mark agents complete
+            agent_statuses_done = {
+                "security_scanner": "complete" if security else "failed",
+                "code_quality": "complete" if quality else "failed",
+                "dependency_auditor": "complete" if dependency else ("skipped" if not has_manifests else "failed"),
+                "doc_verifier": "complete" if doc else "failed",
+            }
+            await _store(EphemeralScanStatus(
+                session_id=session_id, status="running",
+                repo_full_name=event.repo_full_name, created_at=created_at,
+                progress_percent=80, current_step="Synthesizing results",
+                agent_statuses=agent_statuses_done,
+            ))
 
             # Synthesize
             report = self._synthesizer.synthesize(
@@ -280,6 +343,13 @@ class Orchestrator:
                 dependency=dependency,
                 doc=doc,
             )
+
+            await _store(EphemeralScanStatus(
+                session_id=session_id, status="running",
+                repo_full_name=event.repo_full_name, created_at=created_at,
+                progress_percent=92, current_step="Finalizing report",
+                agent_statuses=agent_statuses_done,
+            ))
 
             # Project findings to ephemeral format (no DB IDs)
             ephemeral_findings = [
@@ -309,6 +379,9 @@ class Orchestrator:
                 pr_summary=report.pr_summary,
                 created_at=created_at,
                 completed_at=datetime.now(timezone.utc),
+                progress_percent=100,
+                current_step="Done",
+                agent_statuses=agent_statuses_done,
             ))
 
             logger.info("[orchestrator] Ephemeral scan complete for %s: %d findings",
@@ -324,6 +397,8 @@ class Orchestrator:
                 error=str(e),
                 created_at=created_at,
                 completed_at=datetime.now(timezone.utc),
+                progress_percent=0,
+                current_step="Failed",
             ))
 
     # ── Helpers ────────────────────────────────────────────────────────────────
@@ -433,6 +508,7 @@ class Orchestrator:
             repo_full_name=event.repo_full_name,
             event_type=EventType.FULL_SCAN,
             pr_number=None,
+            head_sha=event.head_sha or "",
             raw_diff=raw_diff,
             diff_hunks=diff_hunks,
             changed_files=code_files,

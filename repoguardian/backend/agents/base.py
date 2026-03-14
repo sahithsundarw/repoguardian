@@ -200,7 +200,7 @@ class BaseAgent(ABC):
                     system_prompt=system_prompt,
                     user_message=user_message,
                     output_schema=output_schema,
-                    temperature=0.05 + i * 0.05,  # slight variation
+                    temperature=0.0,
                 )
                 results.append(result)
             except Exception as e:

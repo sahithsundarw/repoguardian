@@ -71,6 +71,7 @@ class HealthAggregatorAgent:
         report: SynthesizedReport,
         event_label: str,
         db: AsyncSession,
+        head_sha: str = "",
     ) -> HealthRecord:
         """
         Compute a new health score from the synthesized report and persist it.
@@ -90,32 +91,61 @@ class HealthAggregatorAgent:
         low = len(report.low_findings)
         info = len(report.info_findings)
 
-        record = HealthRecord(
-            repository_id=repo_id,
-            overall_score=round(overall, 1),
-            grade=grade,
-            score_code_quality=round(sub_scores["code_quality"], 1),
-            score_security=round(sub_scores["security"], 1),
-            score_dependencies=round(sub_scores["dependencies"], 1),
-            score_documentation=round(sub_scores["documentation"], 1),
-            score_test_coverage=round(sub_scores["test_coverage"], 1),
-            critical_count=critical,
-            high_count=high,
-            medium_count=medium,
-            low_count=low,
-            info_count=info,
-            trigger_event=event_label,
-            trigger_pr_number=report.pr_number,
-            metadata={
-                "verdict": report.overall_verdict,
-                "token_cost": report.total_token_cost,
-                "files_reviewed": len(set(
-                    f.file_path for f in report.findings if f.file_path
-                )),
-            },
-        )
+        extra_meta = {
+            "verdict": report.overall_verdict,
+            "token_cost": report.total_token_cost,
+            "files_reviewed": len(set(
+                f.file_path for f in report.findings if f.file_path
+            )),
+        }
 
-        db.add(record)
+        # Upsert: if same repo + SHA already has a record, update it in-place
+        record: HealthRecord | None = None
+        if head_sha:
+            existing_stmt = select(HealthRecord).where(
+                HealthRecord.repository_id == repo_id,
+                HealthRecord.head_sha == head_sha,
+            )
+            record = (await db.execute(existing_stmt)).scalar_one_or_none()
+
+        if record is not None:
+            record.overall_score = round(overall, 1)
+            record.grade = grade
+            record.score_code_quality = round(sub_scores["code_quality"], 1)
+            record.score_security = round(sub_scores["security"], 1)
+            record.score_dependencies = round(sub_scores["dependencies"], 1)
+            record.score_documentation = round(sub_scores["documentation"], 1)
+            record.score_test_coverage = round(sub_scores["test_coverage"], 1)
+            record.critical_count = critical
+            record.high_count = high
+            record.medium_count = medium
+            record.low_count = low
+            record.info_count = info
+            record.trigger_event = event_label
+            record.trigger_pr_number = report.pr_number
+            record.extra_metadata = extra_meta
+        else:
+            record = HealthRecord(
+                repository_id=repo_id,
+                head_sha=head_sha or None,
+                overall_score=round(overall, 1),
+                grade=grade,
+                score_code_quality=round(sub_scores["code_quality"], 1),
+                score_security=round(sub_scores["security"], 1),
+                score_dependencies=round(sub_scores["dependencies"], 1),
+                score_documentation=round(sub_scores["documentation"], 1),
+                score_test_coverage=round(sub_scores["test_coverage"], 1),
+                critical_count=critical,
+                high_count=high,
+                medium_count=medium,
+                low_count=low,
+                info_count=info,
+                trigger_event=event_label,
+                trigger_pr_number=report.pr_number,
+                extra_metadata=extra_meta,
+            )
+            db.add(record)
+
         await db.commit()
         await db.refresh(record)
 

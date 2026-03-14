@@ -10,11 +10,15 @@ Results are stored in Redis under key `repoguardian:state:ephemeral:{session_id}
 
 from __future__ import annotations
 
+import asyncio
+import json
 import re
+import time
 import uuid
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from backend.models.database import EventType, Platform
 from backend.models.schemas import (
@@ -85,6 +89,50 @@ async def start_ephemeral_scan(body: EphemeralScanRequest) -> dict:
     await producer.publish(event)
 
     return {"session_id": session_id, "repo_full_name": full_name}
+
+
+@router.get("/ephemeral/{session_id}/stream")
+async def stream_ephemeral_progress(session_id: str) -> StreamingResponse:
+    """
+    Server-Sent Events stream for real-time Flash Audit progress.
+    Emits a `data:` event every time the scan status changes in Redis.
+    Closes with `event: done` on completion or `event: timeout` after 3.5 min.
+    """
+    redis = await get_redis()
+    state = StateStore(redis)
+
+    async def generator():
+        deadline = time.monotonic() + 210  # 3.5 min hard cap
+        prev_json: str | None = None
+
+        while time.monotonic() < deadline:
+            raw = await state.get(f"ephemeral:{session_id}")
+            if raw is None:
+                yield f"event: error\ndata: {json.dumps({'error': 'session_not_found'})}\n\n"
+                return
+
+            cur_json = json.dumps(raw, sort_keys=True)
+            if cur_json != prev_json:
+                yield f"data: {cur_json}\n\n"
+                prev_json = cur_json
+
+            if raw.get("status") in ("complete", "failed"):
+                yield "event: done\ndata: {}\n\n"
+                return
+
+            await asyncio.sleep(0.5)
+
+        yield "event: timeout\ndata: {}\n\n"
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.get("/ephemeral/{session_id}", response_model=EphemeralScanStatus)

@@ -1,4 +1,5 @@
 import React from "react";
+import { T } from "../theme";
 
 interface Props {
   score: number;
@@ -23,7 +24,7 @@ export const HealthScoreCard: React.FC<Props> = ({ score, grade, delta7d, veloci
   const color = gradeColor[grade] ?? "#94a3b8";
   return (
     <div style={{
-      background: "#1e293b", borderRadius: 16, padding: 32,
+      background: T.surface, borderRadius: 16, padding: 32,
       display: "flex", flexDirection: "column", alignItems: "center",
       gap: 8, minWidth: 200,
     }}>
@@ -43,7 +44,7 @@ export const HealthScoreCard: React.FC<Props> = ({ score, grade, delta7d, veloci
       }}>
         {velocityIcon[velocity]} {delta7d > 0 ? "+" : ""}{delta7d.toFixed(1)} pts (7d)
       </div>
-      <div style={{ color: "#64748b", fontSize: 14 }}>Repository Health Score</div>
+      <div style={{ color: T.textDim, fontSize: 14 }}>Repository Health Score</div>
     </div>
   );
 };

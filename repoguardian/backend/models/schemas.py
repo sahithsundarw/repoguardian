@@ -142,6 +142,9 @@ class ContextPackage(BaseModel):
     documentation_files: list[FileContent]
     repo_structure: str    # directory tree (depth 2)
 
+    # Commit SHA being analysed (for deduplication and cache)
+    head_sha: str = ""
+
     # Budget accounting
     total_tokens_used: int = 0
     budget_remaining: int = 0
@@ -470,3 +473,7 @@ class EphemeralScanStatus(BaseModel):
     error: str | None = None
     created_at: datetime
     completed_at: datetime | None = None
+    # Real-time progress fields (for SSE streaming)
+    progress_percent: int = 0
+    current_step: str | None = None
+    agent_statuses: dict[str, str] = {}  # agent_name → "pending"|"running"|"complete"|"skipped"

@@ -209,6 +209,7 @@ class DependencyAuditorAgent(BaseAgent):
                 return []
             data = response.json()
         except Exception:
+            logger.exception("[dependency_auditor] OSV API request failed")
             return []
 
         vulns = []

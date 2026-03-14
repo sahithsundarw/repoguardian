@@ -257,8 +257,8 @@ class CodeQualityAgent(BaseAgent):
                     output_schema=_QualityLLMOutput,
                 ),
             )
-        except Exception as e:
-            self.log_error("Quality LLM analysis failed: %s", e=str(e))
+        except Exception:
+            logger.exception("[code_quality] LLM analysis failed")
             return []
 
         return [

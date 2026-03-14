@@ -6,6 +6,8 @@ import { SubScoreRadar } from "../components/SubScoreRadar";
 import { FindingsTable } from "../components/FindingsTable";
 import { TrendChart } from "../components/TrendChart";
 import { HotZoneList } from "../components/HotZoneList";
+import { SkeletonDashboard } from "../components/Skeleton";
+import { T } from "../theme";
 
 export const Dashboard: React.FC = () => {
   const { repoId } = useParams<{ repoId: string }>();
@@ -19,6 +21,8 @@ export const Dashboard: React.FC = () => {
   const [scanError, setScanError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Ref to hold baseline timestamp — avoids stale closure in poll callback
+  const baseTimestampRef = useRef<string>("");
 
   const stopPolling = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -27,6 +31,8 @@ export const Dashboard: React.FC = () => {
 
   const triggerScan = async () => {
     if (!repoId || scanning) return;
+    // Clear any existing poll/progress intervals before starting a new scan
+    stopPolling();
     setScanning(true);
     setScanProgress(0);
     setScanError(null);
@@ -48,8 +54,8 @@ export const Dashboard: React.FC = () => {
       setScanProgress(pct);
     }, 500);
 
-    // Capture baseline to detect when new data arrives
-    const baseTimestamp = dashboard?.as_of ?? "";
+    // Store baseline via ref to avoid stale closure inside poll callback
+    baseTimestampRef.current = dashboard?.as_of ?? "";
 
     // Poll every 6s — refresh dashboard when as_of changes or after max attempts
     let attempts = 0;
@@ -58,7 +64,7 @@ export const Dashboard: React.FC = () => {
       attempts++;
       try {
         const updated = await api.health.dashboard(repoId!);
-        const hasNewData = updated.as_of !== baseTimestamp;
+        const hasNewData = updated.as_of !== baseTimestampRef.current;
         const timedOut = attempts >= MAX_ATTEMPTS;
 
         if (hasNewData || timedOut) {
@@ -102,16 +108,11 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [repoId]);
 
-  if (loading) return (
-    <div style={styles.center}>
-      <div style={styles.spinner} />
-      <div style={{ color: "#64748b", marginTop: 16 }}>Loading dashboard...</div>
-    </div>
-  );
+  if (loading) return <SkeletonDashboard />;
 
   if (error || !dashboard) return (
     <div style={styles.center}>
-      <div style={{ color: "#ef4444", fontSize: 18 }}>⚠️ {error || "Failed to load dashboard"}</div>
+      <div style={{ color: T.error, fontSize: 18 }}>⚠️ {error || "Failed to load dashboard"}</div>
     </div>
   );
 
@@ -127,18 +128,27 @@ export const Dashboard: React.FC = () => {
     LOW: findings.filter((f) => f.severity === "LOW").length,
   };
 
+  // Compute live active findings from current findings state (stays in sync after HITL actions)
+  const liveActiveFindings: Record<string, number> = {
+    CRITICAL: findings.filter((f) => f.status === "open" && f.severity === "CRITICAL").length,
+    HIGH:     findings.filter((f) => f.status === "open" && f.severity === "HIGH").length,
+    MEDIUM:   findings.filter((f) => f.status === "open" && f.severity === "MEDIUM").length,
+    LOW:      findings.filter((f) => f.status === "open" && f.severity === "LOW").length,
+    INFO:     findings.filter((f) => f.status === "open" && f.severity === "INFO").length,
+  };
+
   return (
     <div style={styles.page}>
       {/* Header */}
       <div style={styles.header}>
         <div>
-          <Link to="/" style={{ color: "#64748b", textDecoration: "none", fontSize: 14 }}>
+          <Link to="/" style={{ color: T.textDim, textDecoration: "none", fontSize: 14 }}>
             ← All Repositories
           </Link>
-          <h1 style={{ color: "#f1f5f9", margin: "8px 0 4px", fontSize: 24 }}>
+          <h1 style={{ color: T.text, margin: "8px 0 4px", fontSize: 24 }}>
             🛡️ {dashboard.repo_full_name}
           </h1>
-          <div style={{ color: "#64748b", fontSize: 13 }}>
+          <div style={{ color: T.textDim, fontSize: 13 }}>
             Last updated: {new Date(dashboard.as_of).toLocaleString()}
           </div>
         </div>
@@ -150,7 +160,7 @@ export const Dashboard: React.FC = () => {
               disabled={scanning}
               style={{
                 ...styles.refreshBtn,
-                background: scanning ? "#4f46e5" : "#6366f1",
+                background: scanning ? T.accentDim : T.accent,
                 color: "#fff",
                 opacity: scanning ? 0.85 : 1,
                 minWidth: 130,
@@ -164,26 +174,26 @@ export const Dashboard: React.FC = () => {
           {scanning && (
             <div style={{ width: 260 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: "#94a3b8", fontSize: 12 }}>Analyzing codebase…</span>
-                <span style={{ color: "#6366f1", fontSize: 12, fontWeight: 600 }}>{Math.round(scanProgress)}%</span>
+                <span style={{ color: T.textMuted, fontSize: 12 }}>Analyzing codebase…</span>
+                <span style={{ color: T.accent, fontSize: 12, fontWeight: 600 }}>{Math.round(scanProgress)}%</span>
               </div>
-              <div style={{ background: "#1e293b", borderRadius: 999, height: 6, overflow: "hidden", border: "1px solid #334155" }}>
+              <div style={{ background: T.surface, borderRadius: 999, height: 6, overflow: "hidden", border: `1px solid ${T.border}` }}>
                 <div style={{
                   height: "100%",
                   width: `${scanProgress}%`,
-                  background: "linear-gradient(90deg, #6366f1, #818cf8)",
+                  background: `linear-gradient(90deg, ${T.accent}, ${T.accentDim})`,
                   borderRadius: 999,
                   transition: "width 0.4s ease",
                 }} />
               </div>
-              <div style={{ color: "#475569", fontSize: 11, marginTop: 4, textAlign: "right" }}>
+              <div style={{ color: T.textDim, fontSize: 11, marginTop: 4, textAlign: "right" }}>
                 Dashboard will update automatically
               </div>
             </div>
           )}
 
           {scanError && (
-            <div style={{ fontSize: 12, color: "#ef4444", maxWidth: 260, textAlign: "right" }}>
+            <div style={{ fontSize: 12, color: T.error, maxWidth: 260, textAlign: "right" }}>
               {scanError}
             </div>
           )}
@@ -199,31 +209,31 @@ export const Dashboard: React.FC = () => {
           velocity={dashboard.trend_velocity}
         />
         <SubScoreRadar subScores={dashboard.sub_scores} />
-        <div style={{ background: "#1e293b", borderRadius: 16, padding: 24 }}>
-          <h3 style={{ color: "#f1f5f9", margin: "0 0 16px", fontSize: 16 }}>
+        <div style={{ background: T.surface, borderRadius: 16, padding: 24 }}>
+          <h3 style={{ color: T.text, margin: "0 0 16px", fontSize: 16 }}>
             Active Issues Summary
           </h3>
-          {Object.entries(dashboard.active_findings).map(([sev, count]) =>
+          {Object.entries(liveActiveFindings).map(([sev, count]) =>
             count > 0 ? (
               <div key={sev} style={{
                 display: "flex", justifyContent: "space-between",
-                padding: "6px 0", borderBottom: "1px solid #334155",
+                padding: "6px 0", borderBottom: `1px solid ${T.border}`,
               }}>
                 <span style={{ color: severityColor[sev], fontWeight: 600 }}>{sev}</span>
-                <span style={{ color: "#f1f5f9", fontWeight: 700 }}>{count}</span>
+                <span style={{ color: T.text, fontWeight: 700 }}>{count}</span>
               </div>
             ) : null
           )}
-          {Object.values(dashboard.active_findings).every((c) => c === 0) && (
-            <div style={{ color: "#22c55e", fontSize: 14 }}>✨ No active issues!</div>
+          {Object.values(liveActiveFindings).every((c) => c === 0) && (
+            <div style={{ color: T.success, fontSize: 14 }}>✨ No active issues!</div>
           )}
 
-          <h4 style={{ color: "#94a3b8", marginTop: 20, marginBottom: 12, fontSize: 14 }}>
+          <h4 style={{ color: T.textMuted, marginTop: 20, marginBottom: 12, fontSize: 14 }}>
             Recent Activity
           </h4>
           {dashboard.recent_activity.slice(0, 5).map((a, i) => (
-            <div key={i} style={{ color: "#64748b", fontSize: 12, padding: "3px 0" }}>
-              <span style={{ color: "#94a3b8" }}>{a.actor}</span> {a.event.replace(/_/g, " ")}
+            <div key={i} style={{ color: T.textDim, fontSize: 12, padding: "3px 0" }}>
+              <span style={{ color: T.textMuted }}>{a.actor}</span> {a.event.replace(/_/g, " ")}
             </div>
           ))}
         </div>
@@ -245,8 +255,8 @@ export const Dashboard: React.FC = () => {
               onClick={() => setActiveTab(tab)}
               style={{
                 ...styles.tabBtn,
-                background: activeTab === tab ? "#6366f1" : "#1e293b",
-                color: activeTab === tab ? "#fff" : "#94a3b8",
+                background: activeTab === tab ? T.accent : T.surface,
+                color: activeTab === tab ? "#fff" : T.textMuted,
               }}
             >
               {tab === "all" ? "All" : tab}
@@ -302,15 +312,8 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     height: "60vh",
   },
-  spinner: {
-    width: 48, height: 48,
-    border: "4px solid #334155",
-    borderTop: "4px solid #6366f1",
-    borderRadius: "50%",
-    animation: "spin 1s linear infinite",
-  },
   refreshBtn: {
-    background: "#334155", color: "#f1f5f9",
+    background: T.border, color: T.text,
     border: "none", borderRadius: 8,
     padding: "8px 16px", cursor: "pointer",
     fontSize: 14,
@@ -324,6 +327,6 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 const severityColor: Record<string, string> = {
-  CRITICAL: "#ef4444", HIGH: "#f97316",
-  MEDIUM: "#eab308", LOW: "#22c55e", INFO: "#94a3b8",
+  CRITICAL: T.critical, HIGH: T.high,
+  MEDIUM: T.medium, LOW: T.low, INFO: T.info,
 };

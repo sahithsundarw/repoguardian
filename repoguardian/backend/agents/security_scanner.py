@@ -193,8 +193,8 @@ class SecurityScannerAgent(BaseAgent):
                     output_schema=_SecurityLLMOutput,
                 ),
             )
-        except Exception as e:
-            self.log_error("Security LLM scan failed: %s", e=str(e))
+        except Exception:
+            logger.exception("[security_scanner] LLM scan failed")
             return []
 
         findings = []
